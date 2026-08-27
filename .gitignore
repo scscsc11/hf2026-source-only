@@ -21,4 +21,8 @@ ue-renderer/
 *.exe
 *.dll
 *.pak
-*.zip
+*.zipconfig/HeightSample.csv
+**/HeightSample.csv
+
+# HF2026 large terrain data
+**/HeightSample.csv

@@ -1,0 +1,1 @@
+{"version":3,"file":"jam-zone-overlay.d.ts","sourceRoot":"","sources":["../../../src/rendering/jam-zone-overlay.ts"],"names":[],"mappings":"AAOA,OAAO,KAAK,KAAK,KAAK,MAAM,OAAO,CAAC;AACpC,OAAO,EAAE,WAAW,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAI1D,MAAM,MAAM,OAAO,GAAG,WAAW,CAAC;AAElC,qBAAa,cAAe,SAAQ,WAAW;gBACjC,MAAM,EAAE,KAAK,CAAC,KAAK;CAUhC"}

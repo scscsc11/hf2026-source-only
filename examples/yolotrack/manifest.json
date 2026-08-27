@@ -1,0 +1,8 @@
+{
+  "id": "yolotrack",
+  "name": "赛题四:YOLO 视觉跟踪",
+  "description": "用 YOLOv8 视觉模型检测车辆位置，直接驱动云台 pan/tilt 跟踪（替代几何 FOV 检测）",
+  "scenario": "config/scenario.json",
+  "runner_module": "examples.yolotrack.run",
+  "default_duration": 60.0
+}

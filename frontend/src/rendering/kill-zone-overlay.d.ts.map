@@ -1,0 +1,1 @@
+{"version":3,"file":"kill-zone-overlay.d.ts","sourceRoot":"","sources":["../../../src/rendering/kill-zone-overlay.ts"],"names":[],"mappings":"AAOA,OAAO,KAAK,KAAK,KAAK,MAAM,OAAO,CAAC;AACpC,OAAO,EAAE,WAAW,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAI1D,MAAM,MAAM,cAAc,GAAG,WAAW,CAAC;AAEzC,qBAAa,eAAgB,SAAQ,WAAW;gBAClC,MAAM,EAAE,KAAK,CAAC,KAAK;CAUhC"}

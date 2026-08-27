@@ -1,0 +1,8 @@
+{
+  "id": "adversarial_swarm_search",
+  "name": "赛题三:对抗集群搜索",
+  "description": "对抗性蜂群搜索：威胁区裁决 + 盲避让",
+  "scenario": "config/scenario.json",
+  "runner_module": "examples.adversarial_swarm_search.run",
+  "default_duration": 60.0
+}

@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensim.local/contracts/sim-state-v1.json",
+  "title": "OpenSim sim:state Frame",
+  "description": "Per-tick simulation state published on the `sim:state` Redis channel. The frontend (visualization/src/core/state-normalizer.ts) parses this component-organised frame into the flat SimulationState consumed by the renderers. Schema is the source of truth for the frame shape; the frontend validates inbound frames against it before normalisation (Spec 020 T8). Entity payloads are keyed by unique_id at the top level; the only non-entity top-level keys are timestamp / status / sim_time / sim_time_str / step_perf / reason / zones.",
+  "type": "object",
+  "required": ["timestamp", "status"],
+  "additionalProperties": true,
+  "properties": {
+    "timestamp": {
+      "type": "number",
+      "description": "Wall-clock or simulation epoch seconds. Frames without a numeric timestamp are dropped by the normaliser."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["running", "paused", "ended", "idle"],
+      "description": "Simulation lifecycle status. Unknown values cause the normaliser to drop the frame."
+    },
+    "sim_time": { "type": ["number", "string"] },
+    "sim_time_str": { "type": "string" },
+    "step_perf": { "type": ["number", "object", "string"] },
+    "reason": { "type": "string" },
+    "zones": {
+      "$ref": "https://opensim.local/contracts/zones-bucket-v1.json",
+      "description": "ThreatArbiter-published zone bucket (air_defense + comm_jam_static + comm_jam_random). Carried verbatim onto SimulationState.zones."
+    }
+  },
+  "patternProperties": {
+    "^(?!timestamp$|status$|sim_time$|sim_time_str$|step_perf$|reason$|zones$).+$": {
+      "$ref": "#/$defs/entity"
+    }
+  },
+  "$defs": {
+    "latlon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["latitude", "longitude", "altitude"],
+      "properties": {
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "altitude": { "type": "number" }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["uav", "fixed_wing_uav", "ground_vehicle", "decoy_vehicle"],
+          "description": "Entity kind. `fixed_wing_uav` is an alias canonicalised to `uav` by EntityKindRegistry."
+        },
+        "name": { "type": "string" },
+        "status": { "type": "string", "description": "e.g. active / destroyed / unknown. Used by KillEventFX transition detection." },
+        "heading": { "type": "number", "description": "Ground-vehicle heading, degrees clockwise from north. Vehicle-only." },
+        "speed": { "type": "number", "description": "Vehicle-only scalar speed." },
+        "platform": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "position": { "$ref": "#/$defs/latlon" },
+            "attitude": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "roll": { "type": "number" },
+                "pitch": { "type": "number" },
+                "yaw": { "type": "number", "description": "UAV yaw, degrees clockwise from north." }
+              }
+            }
+          }
+        },
+        "kinematics": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "velocity": { "type": "number", "description": "UAV scalar speed." }
+          }
+        },
+        "trajectory": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "speed": { "type": "number", "description": "Vehicle trajectory speed (preferred over top-level `speed`)." }
+          }
+        },
+        "gimbal_tracking": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "UAV-only gimbal + detection sub-state.",
+          "properties": {
+            "pan_angle": { "type": "number" },
+            "tilt_angle": { "type": "number" },
+            "track_enabled": { "type": "boolean" },
+            "fov": { "type": "number", "description": "Live field-of-view (deg), published every tick so consumers (algorithm SDK, front-end frustum) track runtime set_fov changes. Clients fall back to 70 when absent." },
+            "detection": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "detected": { "type": "boolean" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                "target_position": {
+                  "oneOf": [
+                    { "type": "null" },
+                    { "$ref": "#/$defs/latlon" }
+                  ]
+                },
+                "azimuth_error": { "type": "number" },
+                "target_type": { "type": "string" },
+                "misid_flag": { "type": "boolean" },
+                "misid_count": { "type": "number" },
+                "misid_track_duration": { "type": "number" }
+              }
+            }
+          }
+        },
+        "comm": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "UAV-only inter-entity comms component.",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "range_m": { "type": "number" },
+            "max_bytes": { "type": "number" },
+            "max_rate_hz": { "type": "number" },
+            "inbox": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "sender": { "type": "string" },
+                  "payload": { "type": "string" },
+                  "recv_time": { "type": "number" }
+                }
+              }
+            },
+            "stats": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "sent": { "type": "number" },
+                "delivered": { "type": "number" },
+                "received": { "type": "number" },
+                "rejected_bytes": { "type": "number" },
+                "rejected_rate": { "type": "number" },
+                "rejected_range": { "type": "number" },
+                "rejected_jam": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

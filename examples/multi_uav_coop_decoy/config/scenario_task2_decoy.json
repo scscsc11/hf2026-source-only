@@ -1,0 +1,39 @@
+{
+  "_comment": "Task 2-A 测试场景：1 FixedWingUAV + 1 DecoyVehicle（静止诱饵）。UAV 绕诱饵盘旋，分类器须在 2s 内判为 DECOY。",
+  "config_version": "1.0",
+  "simulation": {
+    "tick_rate_hz": 60.0,
+    "time_scale": 1.0,
+    "redis_host": "127.0.0.1",
+    "redis_port": 6379,
+    "redis_command_channel": "sim:commands",
+    "redis_state_channel": "sim:state"
+  },
+  "entities": [
+    {
+      "id": "20001",
+      "name": "uav_alpha",
+      "type": "FixedWingUAV",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.0008,
+        "initial_longitude": 125.0010,
+        "initial_altitude": 300.0,
+        "initial_heading": 0.0
+      },
+      "components": {
+        "kinematics": {"type": "KinematicsComponent", "enabled": true, "params": {"min_speed": 15.0, "max_speed": 40.0, "max_bank_angle_deg": 45.0, "max_climb_rate_ms": 10.0}},
+        "gimbal_tracking": {"type": "GimbalTrackingComponent", "enabled": true, "params": {"pan_rate_limit_dps": 60.0, "tilt_rate_limit_dps": 45.0, "auto_track": false, "fov": 30.0}}
+      }
+    },
+    {
+      "_comment": "decoy — 静止（speed 0）。距 UAV 起飞点 ~330m。",
+      "id": "30001",
+      "name": "decoy_1",
+      "type": "DecoyVehicle",
+      "enabled": true,
+      "params": {"initial_latitude": 27.0030, "initial_longitude": 125.0030, "initial_altitude": 0.0},
+      "components": {"trajectory": {"type": "TargetTrajectoryComponent", "enabled": true, "params": {"speed": 0.0}}}
+    }
+  ]
+}

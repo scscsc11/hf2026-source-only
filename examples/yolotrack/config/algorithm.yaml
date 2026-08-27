@@ -1,0 +1,61 @@
+# yolotrack 算法配置
+# 默认 controller 改为 YoloSearchTrackController（在 TRACK 模式用 YOLO 检测）
+# 关闭 yolo.enabled 即等价于原 uav_search_track_car 行为
+
+controller: yolotrack.yolo_controller:YoloSearchTrackController
+
+# 随机种子（null=随机；整数=可复现）
+seed: null
+
+# === 5 个核心可调参数（与原 FSM 对齐） ===
+
+# 搜索模式：spiral | grid
+mode: spiral
+
+# 搜索螺旋最大半径（米）
+search_radius: 500.0
+
+# 搜索高度（AGL，相对地面，米）
+search_altitude_agl: 300.0
+
+# 云台俯仰扫掠周期（秒，搜索时云台正弦扫掠的周期）
+sweep_period: 4.0
+
+# 跟踪 loiter 半径（米）
+loiter_radius: 200.0
+
+# === 进阶参数 ===
+advanced:
+  k_acquire: 5
+  k_lost: 60
+  spiral_growth_rate: 30.0
+  sweep_pitch_min: -60.0
+  sweep_pitch_max: -30.0
+  loiter_refresh_period: 3.0
+  control_rate_hz: 10
+
+# === YOLO 子模块（赛题四核心） ===
+yolo:
+  # 总开关：false 等价于原 FsmSearchTrackController 行为
+  enabled: true
+
+  # 模型文件（相对 example 目录）
+  model_path: target_vehicle_yolov8s.pt
+
+  # 推理参数（必须与训练一致；详见 /home/lpwang/YOLO/yolo_car/README.md）
+  imgsz: 1024
+  conf: 0.25
+  tracker: bytetrack.yaml
+
+  # 相机内参（与 scenario.json 的 gimbal_tracking.fov 对齐）
+  # 这里 fov 是图像宽度方向的总视场（度）
+  camera_hfov_deg: 60.0
+  camera_vfov_deg: 45.0
+
+  # 帧源：spec/022 Redis hash sync_camera:{uav_id}:frame:{frame_no}
+  redis_host: 127.0.0.1
+  redis_port: 6379
+  uav_id: "10002"
+
+  # YOLO 检测"过期"阈值（毫秒）。超过此时间视为无 yolo 检测，fallback 到几何 LOS
+  frame_max_age_ms: 200

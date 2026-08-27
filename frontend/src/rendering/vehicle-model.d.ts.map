@@ -1,0 +1,1 @@
+{"version":3,"file":"vehicle-model.d.ts","sourceRoot":"","sources":["../../../src/rendering/vehicle-model.ts"],"names":[],"mappings":"AAMA,OAAO,EAAE,eAAe,EAAE,MAAM,0BAA0B,CAAC;AAC3D,OAAO,EAAE,gBAAgB,EAAyB,MAAM,sBAAsB,CAAC;AAE/E,qBAAa,oBAAqB,SAAQ,gBAAgB;gBAC5C,UAAU,EAAE,eAAe;CAGxC"}

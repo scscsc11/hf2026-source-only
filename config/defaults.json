@@ -1,0 +1,91 @@
+{
+  "_schema_version": "1.0",
+  "_comment": "OpenSim 模块默认值。由 ConfigLoader 启动时加载，被 scenario config 覆盖。字段顺序按 模块-字段 字母序排列。",
+  "defaults": {
+    "astar_planner": {
+      "grid_csv_path": "config/GridDataAll_18.csv"
+    },
+    "comm": {
+      "range_m": 1000.0,
+      "max_bytes": 50,
+      "max_rate_hz": 4.0,
+      "inbox_capacity": 32,
+      "rng_seed": 0
+    },
+    "dual_axis_gimbal": {
+      "auto_track": true,
+      "default_fov": 60.0,
+      "initial_pitch": -90.0,
+      "initial_yaw": 0.0,
+      "max_fov": 120.0,
+      "max_pan_rate": 60.0,
+      "max_tilt_rate": 30.0,
+      "min_fov": 5.0
+    },
+    "engine": {
+      "auto_start": true,
+      "idle_sleep_ms": 10,
+      "paused_cooldown_seconds": 1,
+      "tick_rate_hz": 60.0,
+      "timezone_offset_seconds": 28800
+    },
+    "fixed_wing_uav": {
+      "default_loiter_direction": "left",
+      "default_loiter_radius": 200.0,
+      "initial_altitude": 500.0,
+      "initial_heading": 0.0,
+      "initial_latitude": 39.5,
+      "initial_longitude": 116.3,
+      "initial_velocity": 20.0,
+      "stowed_tilt": -90.0
+    },
+    "gimbal_tracking": {
+      "auto_track": false,
+      "default_fov": 50.0,
+      "max_fov": 50.0,
+      "max_pan_rate": 60.0,
+      "max_tilt_rate": 30.0,
+      "min_fov": 5.0,
+      "misid_prob": 0.5,
+      "misid_seed": 0,
+      "stowed_pan": 0.0,
+      "stowed_tilt": -90.0
+    },
+    "kinematics": {
+      "default_target_speed": 20.0,
+      "max_acceleration": 5.0,
+      "max_speed": 40.0,
+      "max_turn_rate": 30.0,
+      "min_speed": 15.0
+    },
+    "path_follower": {
+      "waypoint_tolerance_m": 10.0
+    },
+    "platform": {
+      "max_health_default": 100.0,
+      "initial_health_default": 100.0,
+      "reset_behavior": "restore_initial"
+    },
+    "target_trajectory": {
+      "default_speed": 10.0
+    },
+    "target_vehicle": {
+      "auto_static_speed": 0.0,
+      "default_speed": 10.0,
+      "initial_altitude": 0.0,
+      "initial_latitude": 39.6,
+      "initial_longitude": 116.5
+    },
+    "terrain": {
+      "height_csv_path": "config/HeightSample.csv",
+      "ground_clearance_m": 0.0,
+      "command_out_of_bounds_policy": "reject_command"
+    },
+    "threat_arbiter": {
+      "default_alt_max": 3000.0,
+      "hit_delay_s": 2.0,
+      "hit_probability": 1.0,
+      "hit_rng_seed": 25
+    }
+  }
+}

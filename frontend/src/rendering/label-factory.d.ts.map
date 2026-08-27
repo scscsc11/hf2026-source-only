@@ -1,0 +1,1 @@
+{"version":3,"file":"label-factory.d.ts","sourceRoot":"","sources":["../../../src/rendering/label-factory.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,KAAK,MAAM,OAAO,CAAC;AAE/B,MAAM,WAAW,YAAY;IAC3B,mDAAmD;IACnD,IAAI,EAAE,MAAM,CAAC;IACb,6DAA6D;IAC7D,SAAS,CAAC,EAAE,MAAM,CAAC;CACpB;AAED;;;;GAIG;AACH,wBAAgB,WAAW,CAAC,IAAI,EAAE,YAAY,GAAG,KAAK,CAAC,MAAM,CAuB5D"}

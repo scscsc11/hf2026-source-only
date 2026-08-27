@@ -1,0 +1,272 @@
+{
+  "_comment": "Task 1 测试场景：3 FixedWingUAV + 3 TargetVehicle，无诱饵。目标分布在 3 个扇区的边缘区域（~1100-1300m）并各自运动，检验搜索策略能否覆盖边缘并保持单机持续跟踪。",
+  "config_version": "1.0",
+  "simulation": {
+    "tick_rate_hz": 60.0,
+    "time_scale": 1.0,
+    "redis_host": "127.0.0.1",
+    "redis_port": 6379,
+    "redis_command_channel": "sim:commands",
+    "redis_state_channel": "sim:state"
+  },
+  "entities": [
+    {
+      "id": "20001",
+      "name": "uav_alpha",
+      "type": "FixedWingUAV",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.0005,
+        "initial_longitude": 124.997,
+        "initial_altitude": 300.0,
+        "initial_heading": 0.0
+      },
+      "components": {
+        "kinematics": {
+          "type": "KinematicsComponent",
+          "enabled": true,
+          "params": {
+            "min_speed": 15.0,
+            "max_speed": 40.0,
+            "max_bank_angle_deg": 45.0,
+            "max_climb_rate_ms": 10.0
+          }
+        },
+        "gimbal_tracking": {
+          "type": "GimbalTrackingComponent",
+          "enabled": true,
+          "params": {
+            "pan_rate_limit_dps": 60.0,
+            "tilt_rate_limit_dps": 45.0,
+            "auto_track": false,
+            "fov": 30.0
+          }
+        },
+        "comm": {
+          "type": "CommComponent",
+          "enabled": true,
+          "params": {}
+        }
+      }
+    },
+    {
+      "id": "20002",
+      "name": "uav_bravo",
+      "type": "FixedWingUAV",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.0005,
+        "initial_longitude": 125.003,
+        "initial_altitude": 300.0,
+        "initial_heading": 120.0
+      },
+      "components": {
+        "kinematics": {
+          "type": "KinematicsComponent",
+          "enabled": true,
+          "params": {
+            "min_speed": 15.0,
+            "max_speed": 40.0,
+            "max_bank_angle_deg": 45.0,
+            "max_climb_rate_ms": 10.0
+          }
+        },
+        "gimbal_tracking": {
+          "type": "GimbalTrackingComponent",
+          "enabled": true,
+          "params": {
+            "pan_rate_limit_dps": 60.0,
+            "tilt_rate_limit_dps": 45.0,
+            "auto_track": false,
+            "fov": 30.0
+          }
+        },
+        "comm": {
+          "type": "CommComponent",
+          "enabled": true,
+          "params": {}
+        }
+      }
+    },
+    {
+      "id": "20003",
+      "name": "uav_charlie",
+      "type": "FixedWingUAV",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 26.996,
+        "initial_longitude": 125.0,
+        "initial_altitude": 300.0,
+        "initial_heading": 240.0
+      },
+      "components": {
+        "kinematics": {
+          "type": "KinematicsComponent",
+          "enabled": true,
+          "params": {
+            "min_speed": 15.0,
+            "max_speed": 40.0,
+            "max_bank_angle_deg": 45.0,
+            "max_climb_rate_ms": 10.0
+          }
+        },
+        "gimbal_tracking": {
+          "type": "GimbalTrackingComponent",
+          "enabled": true,
+          "params": {
+            "pan_rate_limit_dps": 60.0,
+            "tilt_rate_limit_dps": 45.0,
+            "auto_track": false,
+            "fov": 30.0
+          }
+        },
+        "comm": {
+          "type": "CommComponent",
+          "enabled": true,
+          "params": {}
+        }
+      }
+    },
+    {
+      "_comment": "target_1 — 扇区0 (东北 ~ENE, 距质心~1200m)，低速往返",
+      "id": "10001",
+      "name": "target_1",
+      "type": "TargetVehicle",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.0054,
+        "initial_longitude": 125.0105,
+        "initial_altitude": 0.0
+      },
+      "components": {
+        "trajectory": {
+          "type": "TargetTrajectoryComponent",
+          "enabled": true,
+          "params": {
+            "speed": 6.0,
+            "waypoints": [
+              {
+                "lat": 27.0054,
+                "lon": 125.0105,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.007,
+                "lon": 125.0125,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.004,
+                "lon": 125.014,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.004,
+                "lon": 125.009,
+                "alt": 0.0,
+                "t": 0.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "_comment": "target_2 — 扇区1 (正南, 距质心~1300m)，中速折线",
+      "id": "10002",
+      "name": "target_2",
+      "type": "TargetVehicle",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 26.9883,
+        "initial_longitude": 125.0,
+        "initial_altitude": 0.0
+      },
+      "components": {
+        "trajectory": {
+          "type": "TargetTrajectoryComponent",
+          "enabled": true,
+          "params": {
+            "speed": 9.0,
+            "waypoints": [
+              {
+                "lat": 26.9883,
+                "lon": 125.0,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 26.986,
+                "lon": 125.0035,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 26.9905,
+                "lon": 125.004,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 26.9905,
+                "lon": 124.997,
+                "alt": 0.0,
+                "t": 0.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "_comment": "target_3 — 扇区2 (西北 ~WNW, 距质心~1100m)，中速三角",
+      "id": "10003",
+      "name": "target_3",
+      "type": "TargetVehicle",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.0049,
+        "initial_longitude": 124.9904,
+        "initial_altitude": 0.0
+      },
+      "components": {
+        "trajectory": {
+          "type": "TargetTrajectoryComponent",
+          "enabled": true,
+          "params": {
+            "speed": 8.0,
+            "waypoints": [
+              {
+                "lat": 27.0049,
+                "lon": 124.9904,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.0075,
+                "lon": 124.9915,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.006,
+                "lon": 124.9875,
+                "alt": 0.0,
+                "t": 0.0
+              },
+              {
+                "lat": 27.003,
+                "lon": 124.9885,
+                "alt": 0.0,
+                "t": 0.0
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

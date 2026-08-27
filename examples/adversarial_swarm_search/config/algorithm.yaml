@@ -1,0 +1,81 @@
+# Spec 019 — Optimised control algorithm for adversarial swarm search.
+#
+# Iteration v2: decoy rejection + cooperative summon + survival-aware altitude.
+#
+# Key changes vs the previous version:
+#   * search_altitude_agl raised to 3000m (above air_defense.alt_max=2500m) so
+#     UAVs survive the SAM belt (was 600m → 3/10 destroyed).
+#   * sector_angular_speed_dps lowered so the lateral waypoint speed stays
+#     below the UAV max_speed (40m/s); previously 40 dps at r=2500m gave
+#     ~1745 m/s lateral speed → all UAVs piled up at the centre.
+#   * expand_time reduced for faster fan-out (10 sectors need to spread fast).
+#   * loiter_radius lowered to 80m → when over a real target it is the
+#     nearest entity and the engine reports it (instead of the nearest decoy).
+#   * sweep_pitch_max widened to -10° → camera footprint at 3000m covers
+#     ~800m of ground, putting real targets inside the gimbal FOV.
+#   * Decoy-classifier params exposed for tuning.
+#   * coop_broadcast_period=1.0 (max 4Hz; K=3 needs timely summons).
+#   * Survival: blind_avoidance_enabled stays true; controller also raises
+#     altitude to high_alt_threshold_m when a SAM zone overlaps the path.
+
+# Controller entry point.
+controller: search_track.swarm_controller:SwarmController
+
+# === Search parameters ===
+# Search radius covers the 5km × 3km target/decoy footprint.
+search_radius: 2500.0
+# Crucial: fly ABOVE air_defense.alt_max=2500m so SAM zones don't kill
+# UAVs. At 3000m AGL with FOV 30° + tilt=-90° (straight down) the
+# camera footprint is a 1.6km-diameter circle on the ground; with the
+# search sweep pan range (±60°) the camera sweeps ~3.2km of ground as
+# the UAV flies — enough to cover the 5km search area.
+search_altitude_agl: 3000.0
+sweep_period: 4.0
+loiter_radius: 80.0
+
+# === Sector-spread search (10 UAVs × 36° wedges) ===
+use_sector_search: true
+expand_time: 25.0
+sector_angular_speed_dps: 12.0
+initial_radius_frac: 0.15
+radius_dither_frac: 0.08
+sector_center_latitude: null
+sector_center_longitude: null
+
+# === Cooperative parameters ===
+# Broadcast every 1s (comm max_rate_hz=4 → 4 messages/s capacity).
+coop_broadcast_period: 1.0
+
+# === Decoy classifier (motion-based, never reads scenario target types) ===
+# Real targets move (5-8 m/s → ≥5m span in 1.5s); decoys are static.
+# The smoothness gate (max_jump_m) defeats nearest-target switching.
+decoy_move_threshold_m: 5.0
+decoy_min_window_s: 1.0
+decoy_min_samples: 5
+decoy_max_jump_m: 80.0
+# If a TRACK is held >decoy_timeout_s without a REAL decision,
+# treat as decoy and release (prevents permanent orbiting on static decoys).
+decoy_timeout_s: 2.0
+
+# === Spec 019 — Blind-avoidance of published air-defense zones ===
+# Margin increased to 500m: UAVs start at 600m and climb only 10 m/s,
+# so they CANNOT clear the SAM alt_max (2500m) in a 60s run. Survival
+# is purely lateral — the larger buffer prevents transit through the
+# SAM polygon while the waypoint is being pushed out.
+blind_avoidance_enabled: true
+avoidance_margin_m: 500.0
+high_alt_threshold_m: 3000.0   # if low + over SAM polygon, climb to 3000
+
+# === Advanced parameters ===
+advanced:
+  k_acquire: 2
+  k_lost: 30
+  spiral_growth_rate: 120.0
+  # Gimbal pitch sweep keeps the camera pointed straight down at
+  # 3000m AGL (-90° tilt) so the camera footprint is a 1.6km-diameter
+  # circle on the ground (FOV 30° → 804m radius).
+  sweep_pitch_min: -90.0
+  sweep_pitch_max: -90.0
+  loiter_refresh_period: 3.0
+  control_rate_hz: 10
+  acquire_range_m: 1500.0

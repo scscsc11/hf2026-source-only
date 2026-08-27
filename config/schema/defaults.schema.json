@@ -1,0 +1,219 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenSim Config Defaults Schema",
+  "description": "Schema for config/defaults.json (module default parameters). Validated at startup by ConfigLoader. All paths use / as separator (std::filesystem::path handles platform conversion).",
+  "type": "object",
+  "required": ["defaults"],
+  "additionalProperties": false,
+  "properties": {
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kinematics",
+        "gimbal_tracking",
+        "dual_axis_gimbal",
+        "fixed_wing_uav",
+        "target_vehicle",
+        "target_trajectory",
+        "path_follower",
+        "platform",
+        "astar_planner",
+        "comm",
+        "engine",
+        "terrain",
+        "threat_arbiter"
+      ],
+      "properties": {
+        "kinematics": { "$ref": "#/definitions/module_kinematics" },
+        "gimbal_tracking": { "$ref": "#/definitions/module_gimbal_tracking" },
+        "dual_axis_gimbal": { "$ref": "#/definitions/module_dual_axis_gimbal" },
+        "fixed_wing_uav": { "$ref": "#/definitions/module_fixed_wing_uav" },
+        "target_vehicle": { "$ref": "#/definitions/module_target_vehicle" },
+        "target_trajectory": { "$ref": "#/definitions/module_target_trajectory" },
+        "path_follower": { "$ref": "#/definitions/module_path_follower" },
+        "platform": { "$ref": "#/definitions/module_platform" },
+        "astar_planner": { "$ref": "#/definitions/module_astar_planner" },
+        "comm": { "$ref": "#/definitions/module_comm" },
+        "engine": { "$ref": "#/definitions/module_engine" },
+        "terrain": { "$ref": "#/definitions/module_terrain" },
+        "threat_arbiter": { "$ref": "#/definitions/module_threat_arbiter" }
+      }
+    }
+  },
+  "definitions": {
+    "module_kinematics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_speed", "max_speed", "max_turn_rate", "max_acceleration", "default_target_speed"],
+      "properties": {
+        "min_speed": { "type": "number", "minimum": 0, "maximum": 100, "description": "Minimum kinematic speed (m/s)" },
+        "max_speed": { "type": "number", "minimum": 0, "maximum": 200, "description": "Maximum kinematic speed (m/s)" },
+        "max_turn_rate": { "type": "number", "minimum": 0, "maximum": 180, "description": "Maximum turn rate (deg/s)" },
+        "max_acceleration": { "type": "number", "minimum": 0, "maximum": 50, "description": "Maximum acceleration (m/s^2)" },
+        "default_target_speed": { "type": "number", "minimum": 0, "maximum": 200, "description": "Initial target speed (m/s)" }
+      }
+    },
+    "module_gimbal_tracking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_pan_rate", "max_tilt_rate", "stowed_pan", "stowed_tilt", "auto_track", "default_fov", "min_fov", "max_fov", "misid_prob", "misid_seed"],
+      "properties": {
+        "max_pan_rate": { "type": "number", "minimum": 0, "maximum": 360, "description": "Maximum pan rate (deg/s)" },
+        "max_tilt_rate": { "type": "number", "minimum": 0, "maximum": 360, "description": "Maximum tilt rate (deg/s)" },
+        "stowed_pan": { "type": "number", "minimum": -180, "maximum": 180, "description": "Stowed pan angle (deg)" },
+        "stowed_tilt": { "type": "number", "minimum": -90, "maximum": 90, "description": "Stowed tilt angle (deg)" },
+        "auto_track": { "type": "boolean", "description": "Default auto-track enable flag" },
+        "default_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Default field-of-view (deg)" },
+        "min_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Minimum field-of-view (deg); contestant runtime set_fov is clamped to [min_fov, max_fov]" },
+        "max_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Maximum field-of-view (deg). Competition rule caps this at 50 across all scenarios" },
+        "misid_prob": { "type": "number", "minimum": 0, "maximum": 1, "description": "Per spec 017 FR-012/013: probability a decoy_vehicle is misidentified as a real target when in FOV" },
+        "misid_seed": { "type": "integer", "minimum": 0, "description": "RNG seed for misidentification; 0 = time-random, fixed for deterministic tests" }
+      }
+    },
+    "module_comm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["range_m", "max_bytes", "max_rate_hz"],
+      "properties": {
+        "range_m": { "type": "number", "minimum": 0, "description": "Per spec 017 FR-005/009: inter-UAV comm range (meters)" },
+        "max_bytes": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Per spec 017 FR-005/007: per-message byte cap" },
+        "max_rate_hz": { "type": "number", "minimum": 0, "description": "Per spec 017 FR-005/008: sends-per-second cap" },
+        "inbox_capacity": { "type": "integer", "minimum": 1, "description": "FIFO inbox cap; oldest message dropped on overflow" },
+        "rng_seed": { "type": "integer", "minimum": 0, "description": "RNG seed; 0 = time-random, fixed for deterministic tests" }
+      }
+    },
+    "module_dual_axis_gimbal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_pan_rate", "max_tilt_rate", "default_fov", "min_fov", "max_fov", "initial_pitch", "initial_yaw", "auto_track"],
+      "properties": {
+        "max_pan_rate": { "type": "number", "minimum": 0, "maximum": 360 },
+        "max_tilt_rate": { "type": "number", "minimum": 0, "maximum": 360 },
+        "default_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Default field-of-view (deg)" },
+        "min_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Minimum field-of-view (deg)" },
+        "max_fov": { "type": "number", "minimum": 0.1, "maximum": 180, "description": "Maximum field-of-view (deg)" },
+        "initial_pitch": { "type": "number", "minimum": -90, "maximum": 90, "description": "Initial pitch (deg)" },
+        "initial_yaw": { "type": "number", "minimum": -180, "maximum": 180, "description": "Initial yaw (deg)" },
+        "auto_track": { "type": "boolean" }
+      }
+    },
+    "module_fixed_wing_uav": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initial_latitude", "initial_longitude", "initial_altitude",
+        "initial_heading", "initial_velocity",
+        "default_loiter_radius", "default_loiter_direction", "stowed_tilt"
+      ],
+      "properties": {
+        "initial_latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "initial_longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "initial_altitude": { "type": "number", "minimum": -500, "maximum": 50000, "description": "Altitude in meters WGS84" },
+        "initial_heading": { "type": "number", "minimum": 0, "maximum": 360, "description": "Initial heading (deg, 0=N, 90=E)" },
+        "initial_velocity": { "type": "number", "minimum": 0, "maximum": 200, "description": "Initial speed (m/s)" },
+        "default_loiter_radius": { "type": "number", "minimum": 0, "maximum": 10000, "description": "Default loiter radius (m)" },
+        "default_loiter_direction": { "type": "string", "enum": ["left", "right"] },
+        "stowed_tilt": { "type": "number", "minimum": -90, "maximum": 90, "description": "Reset stowed gimbal tilt (deg)" }
+      }
+    },
+    "module_target_vehicle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial_latitude", "initial_longitude", "initial_altitude", "default_speed", "auto_static_speed"],
+      "properties": {
+        "initial_latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "initial_longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "initial_altitude": { "type": "number", "minimum": -500, "maximum": 50000 },
+        "default_speed": { "type": "number", "minimum": 0, "maximum": 200 },
+        "auto_static_speed": { "type": "number", "minimum": 0, "maximum": 200, "description": "Speed when is_navigating=false" }
+      }
+    },
+    "module_target_trajectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_speed"],
+      "properties": {
+        "default_speed": { "type": "number", "minimum": 0, "maximum": 200 }
+      }
+    },
+    "module_path_follower": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["waypoint_tolerance_m"],
+      "properties": {
+        "waypoint_tolerance_m": { "type": "number", "minimum": 0, "maximum": 1000, "description": "Waypoint arrival tolerance (m)" }
+      }
+    },
+    "module_platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_health_default", "initial_health_default", "reset_behavior"],
+      "properties": {
+        "max_health_default": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "initial_health_default": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "reset_behavior": { "type": "string", "enum": ["restore_initial", "keep_current"] }
+      }
+    },
+    "module_astar_planner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grid_csv_path"],
+      "properties": {
+        "grid_csv_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\0]+$",
+          "description": "Path to A* grid CSV file. Default: config/GridDataAll_18.csv. Resolved relative to CWD. File must exist and be readable at startup."
+        }
+      }
+    },
+    "module_engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tick_rate_hz", "timezone_offset_seconds", "idle_sleep_ms", "paused_cooldown_seconds"],
+      "properties": {
+        "tick_rate_hz": { "type": "number", "minimum": 1, "maximum": 100 },
+        "timezone_offset_seconds": { "type": "number", "minimum": -43200, "maximum": 50400, "description": "Timezone offset in seconds (UTC+8 = 28800)" },
+        "idle_sleep_ms": { "type": "number", "minimum": 1, "maximum": 1000, "description": "Idle loop sleep duration (ms)" },
+        "paused_cooldown_seconds": { "type": "number", "minimum": 0, "maximum": 60, "description": "Minimum pause/resume interval (s)" },
+        "auto_start": { "type": "boolean", "description": "When true, init() transitions the engine straight to kRunning. When false, init() leaves the engine in kIdle (sim_time frozen, entities static) until an external `engine.start` command arrives. May be overridden per-scenario via simulation.auto_start." }
+      }
+    },
+    "module_terrain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["height_csv_path", "ground_clearance_m", "command_out_of_bounds_policy"],
+      "properties": {
+        "height_csv_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\0]+$",
+          "description": "Path to terrain height CSV. Loaded once at startup into a read-only grid. Resolved relative to CWD. File must exist and be readable at startup; missing CSV triggers 'csv_unavailable' degradation path."
+        },
+        "ground_clearance_m": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 10.0,
+          "description": "Per-entity default ground clearance added on top of terrain elevation (meters). Per-entity override via EntityConfig.position.ground_clearance_m."
+        },
+        "command_out_of_bounds_policy": {
+          "type": "string",
+          "enum": ["reject_command", "clamp_to_edge"],
+          "description": "How to handle ground-vehicle commands whose target lat/lon lies outside the terrain CSV rectangle. Default: reject_command (FR-011)."
+        }
+      }
+    },
+    "module_threat_arbiter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hit_delay_s", "hit_probability", "default_alt_max", "hit_rng_seed"],
+      "properties": {
+        "hit_delay_s": { "type": "number", "minimum": 0, "maximum": 60, "description": "Per spec 019 FR-007: default hit-delay (seconds) before kill fires" },
+        "hit_probability": { "type": "number", "minimum": 0, "maximum": 1, "description": "Per spec 019 FR-007: default per-zone kill probability" },
+        "default_alt_max": { "type": "number", "minimum": 0, "maximum": 50000, "description": "Default altitude upper bound for zones that omit alt_max" },
+        "hit_rng_seed": { "type": "integer", "minimum": 0, "description": "Seed for the kill sampler; 0 = time-random" }
+      }
+    }
+  }
+}

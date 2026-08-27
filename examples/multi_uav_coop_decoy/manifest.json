@@ -1,0 +1,8 @@
+{
+  "id": "multi_uav_coop_decoy",
+  "name": "赛题二:多目标协同搜索",
+  "description": "多机协同搜索 + 通信广播 + 诱饵判别",
+  "scenario": "config/scenario.json",
+  "runner_module": "examples.multi_uav_coop_decoy.run",
+  "default_duration": 120.0
+}

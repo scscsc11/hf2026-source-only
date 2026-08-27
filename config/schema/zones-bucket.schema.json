@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensim.local/contracts/zones-bucket-v1.json",
+  "title": "OpenSim sim:state.zones Bucket",
+  "description": "ThreatArbiter-published threat-zone bucket, embedded at sim:state.zones. Carried verbatim onto SimulationState.zones and consumed by KillZoneOverlay (air_defense, red fill + boundary) and JamZoneOverlay (comm_jam_static + comm_jam_random, purple fill). Referenced by sim-state-v1.json.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "air_defense": {
+      "type": "array",
+      "description": "Air-defense (kill) zones. Each polygon is projected to ENU and fan-triangulated; polygons with < 3 vertices are skipped.",
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "comm_jam_static": {
+      "type": "array",
+      "description": "Static comm-jam zones.",
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "comm_jam_random": {
+      "type": "array",
+      "description": "Randomised comm-jam zones (appear/disappear as the kernel ticks).",
+      "items": { "$ref": "#/$defs/zone" }
+    }
+  },
+  "$defs": {
+    "zone": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["polygon"],
+      "properties": {
+        "polygon": {
+          "type": "array",
+          "minItems": 3,
+          "description": "Ordered [(lat, lon), ...] vertex ring. At least 3 vertices produce a filled mesh.",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "number" }
+          }
+        },
+        "alt_min": { "type": "number" },
+        "alt_max": { "type": "number" }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# uav_track_road_target — UAV tracks a target following A* road waypoints.
+
+# Road & navigation
+road_name: road1
+target_speed: 10.0          # m/s target ground speed
+loop: true                  # restart road after last waypoint
+
+# UAV chase parameters
+chase_altitude_agl: 400.0   # meters above ground
+follow_distance: 300.0      # meters behind target
+chase_interval: 2.0         # seconds between chase destination updates
+loiter_radius: 200.0        # loiter radius when tracking

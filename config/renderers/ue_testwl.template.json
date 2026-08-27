@@ -1,0 +1,22 @@
+{
+  "_schema_version": "1.0",
+  "_comment": "UE 渲染器配置模板。复制本文件为 ue_testwl.json 并把 workdir 改成你的 UE 打包产物路径。config/renderers/ 下无 *.json（template 不算）则 UE 子系统休眠，前端用 Three.js 自渲染。",
+  "renderer_id": "ue_testwl",
+  "name": "Unreal Renderer",
+  "description": "UE packaged renderer; off-screen aircraft view rendering",
+  "executable": {
+    "launcher": "run.sh",
+    "workdir": "<PATH_TO_YOUR_UE_PACKAGED_DIR>",
+    "args": [],
+    "env": {}
+  },
+  "gpu_requirements": {
+    "min_vram_mb_per_instance": 8192,
+    "require_api": "vulkan",
+    "exclude_renderers": ["llvmpipe", "swrast"]
+  },
+  "capacity": {
+    "max_aircraft_per_instance": 4,
+    "max_instances_per_gpu": 1
+  }
+}

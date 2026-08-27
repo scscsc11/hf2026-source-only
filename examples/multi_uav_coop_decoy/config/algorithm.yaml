@@ -1,0 +1,80 @@
+# 017 多无人机协同搜索跟踪算法配置（生产配置：扇区区域分配 + 诱饵分类器，
+# 诚实运动分类、无引擎上帝视角）。修改后重新运行 python -m examples.multi_uav_coop_decoy.run 即可生效。
+# cooperative_summon=true 可启用召唤汇聚/认领去重（K=2 协同实验，但诱饵干扰下评分更低）。
+
+# 协同控制器（每架 UAV 一个实例，my_uid 由 run.py 注入）
+controller: search_track.coop_controller:CoopController
+
+# 随机种子
+seed: null
+
+# === 搜索参数（复用 016 FSM） ===
+mode: spiral
+# 搜索半径必须覆盖场景中所有实体。场景实际分布：
+#   目标距质心 766~1068m，诱饵最远 1484m。
+#   800m 只能覆盖 1 个目标，1500m 覆盖全部实体。
+search_radius: 1500.0
+search_altitude_agl: 300.0
+sweep_period: 4.0
+# 近距离绕飞：loiter 越小越靠近真目标，使真目标成为"最近"实体（引擎检测报
+# 最近目标），从而在诱饵干扰下仍能稳定锁定真目标。FixedWing 20m/s 转弯半径
+# ~41m，120m loiter 可稳定盘旋。
+loiter_radius: 60.0
+
+# === 协同参数（017 新增） ===
+# 协同广播周期（秒）：跟踪状态下每隔多久向 peer 广播一次 "T:<uid>"
+coop_broadcast_period: 1.0
+
+# === 扇区搜索参数（017 新增，修复"三机原地盘旋"问题） ===
+# 启用后，SEARCH 命令由 sector_search 生成：每架 UAV 负责一个角度扇区，
+# 在各自扇区内做扩张扫描，从而把整片区域分摊给全队，而不是全部叠在
+# 同一条螺旋线上。设为 false 则回退到 016 的单中心螺旋。
+use_sector_search: true
+# 半径从 initial_radius 扩展到 search_radius 的秒数。
+# UAV max_speed=40 m/s，1500m / 40 ≈ 37.5s，取 40s 使扩展速率
+# 与 UAV 物理速度匹配，避免航点跑得太快 UAV 追不上。
+expand_time: 40.0
+# 扇区内往返扫描的角速度（deg/s）。必须足够慢让 UAV 跟得上航点：
+# 横向速度 ≈ radius * ω。在最大半径 1500m 处，ω=1.5 → 39 m/s（≤UAV max 40）。
+# 旧值 40 在 1500m 处要求 700 m/s 横向，UAV 永远追不上 → 全部滞后聚集中心，
+# 到不了扇区边缘、覆盖不到目标。
+sector_angular_speed_dps: 1.5
+# 起始半径占 search_radius 的比例。0.1 = 从 150m 开始（1500m 搜索半径），
+# 避免三架 UAV 在中心区域重叠扫描浪费时间。
+initial_radius_frac: 0.1
+# 到达 search_radius 后的半径抖动幅度（占 search_radius 比例），
+# 防止 UAV 反复走完全相同的弧线。
+radius_dither_frac: 0.08
+# 搜索区域中心（纬度/经度，十进制度）。留空（null）则 run.py 用首帧
+# 所有 UAV 的质心自动填充，保证三机围绕同一中心分扇区。
+sector_center_latitude: null
+sector_center_longitude: null
+
+# === 协同召唤（Task 3） ===
+# 启用后：UAV 对所跟目标做诱饵分类（诱饵→释放），确认真目标后广播其位置
+# "R:lat,lon"，空闲 UAV 飞向已知真目标协同跟踪；跟踪达 dwell_target_s 后
+# 自标记完成、转向下一个目标，从而 K>=2 顺序完成全部目标。扇区归属过滤在此
+# 模式关闭（让 UAV 跨扇区汇聚）。
+cooperative_summon: false
+# 关闭扇区归属过滤：full 场景目标会跨扇区移动，固定扇区分配无法跟随。
+sector_commitment: true
+# 单目标驻留阈值（秒）：UAV 跟踪一个真目标达此时长即自标记完成、转向下一个。
+# 略大于评分 dwell_target(20s)，保证协同跟踪窗口足够。
+dwell_target_s: 25.0
+
+# === 进阶参数 ===
+advanced:
+  # 快速进入 TRACK（连续 3 检测）+ 快速释放（连续丢失 20 tick≈2s），
+  # 减少诱饵锁定浪费的时间。
+  k_acquire: 3
+  k_lost: 20
+  # 调大到合理值，使回退螺旋（use_sector_search=false）也能在仿真周期内
+  # 覆盖到 search_radius，而不是只爬到几百米就停在原地。
+  spiral_growth_rate: 120.0
+  sweep_pitch_min: -60.0
+  # 拓宽到 -10°：覆盖远距离目标仰角。300m 高度下 tilt=-10°→地面 ~1700m，
+  # tilt=-60°→~173m；30°视场(±15°)下该扫掠区间可覆盖 173~1500m 全部目标。
+  # auto_track=false 后云台按此扫掠做诚实几何检测。
+  sweep_pitch_max: -10.0
+  loiter_refresh_period: 3.0
+  control_rate_hz: 10

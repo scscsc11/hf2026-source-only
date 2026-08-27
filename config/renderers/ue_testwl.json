@@ -1,0 +1,20 @@
+{
+  "renderer_id": "ue_testwl",
+  "name": "Unreal Renderer",
+  "description": "UE packaged renderer; off-screen aircraft view rendering",
+  "executable": {
+    "launcher": "testwl.exe",
+    "workdir": "ue-renderer\\Windows",
+    "args": ["-windowed", "-resx=1", "-resy=1", "-renderoffscreen", "-nosound", "-minimalviewport"],
+    "env": {}
+  },
+  "gpu_requirements": {
+    "min_vram_mb_per_instance": 4096,
+    "require_api": "vulkan",
+    "exclude_renderers": ["llvmpipe", "swrast", "Microsoft Basic Render Driver"]
+  },
+  "capacity": {
+    "max_aircraft_per_instance": 4,
+    "max_instances_per_gpu": 1
+  }
+}

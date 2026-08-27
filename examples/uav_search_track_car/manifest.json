@@ -1,0 +1,8 @@
+{
+  "id": "uav_search_track_car",
+  "name": "赛题一:单目标追踪",
+  "description": "单无人机搜索并跟踪地面小车",
+  "scenario": "config/scenario.json",
+  "runner_module": "examples.uav_search_track_car.run",
+  "default_duration": 60.0
+}

@@ -1,0 +1,49 @@
+{
+  "_schema_version": "1.0",
+  "_comment": "Ground-vehicle (decoy) entity preset — config-driven (T4★ stage 1).",
+  "_description": "Same structure as ground_vehicle.json but reports entity_type 'decoy_vehicle' so GimbalTrackingComponent applies the misidentification probability check (spec 017).",
+
+  "model_id": "decoy_vehicle_default",
+  "model_name": "Decoy Vehicle Default",
+
+  "platform": {
+    "type": "ground_vehicle_platform",
+    "params": {
+      "entity_type": "decoy_vehicle",
+      "max_health": 200.0,
+      "initial_health": 200.0
+    }
+  },
+
+  "components": {
+    "trajectory": {
+      "type": "TargetTrajectoryComponent",
+      "enabled": true,
+      "params": {
+        "speed": 10.0
+      }
+    },
+    "astar_planner": {
+      "type": "AStarPlannerComponent",
+      "enabled": true,
+      "params": {
+        "grid_csv": "config/GridDataAll_18.csv"
+      }
+    },
+    "path_follower": {
+      "type": "PathFollowerComponent",
+      "enabled": true,
+      "params": {
+        "waypoint_tolerance_m": 10.0
+      }
+    }
+  },
+
+  "defaults": {
+    "initial_latitude": 39.6,
+    "initial_longitude": 116.5,
+    "initial_altitude": 0.0,
+    "default_speed": 10.0,
+    "auto_static_speed": 0.0
+  }
+}

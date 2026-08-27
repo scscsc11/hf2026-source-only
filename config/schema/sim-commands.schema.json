@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensim.local/contracts/sim-commands-v1.json",
+  "title": "OpenSim sim:commands Frame",
+  "description": "Entity-control command published on the `sim:commands` Redis channel by the frontend (visualization/src/services/vehicle-control.ts + path-replanner.ts). Schema is the source of truth for the command envelope; the frontend validates outbound commands against it before publish (Spec 020 T8). `unique_id` selects the entity when the multi-entity path is used; `target` is the legacy named-slot fallback used only when unique_id is absent.",
+  "type": "object",
+  "required": ["cmd", "params"],
+  "additionalProperties": false,
+  "properties": {
+    "cmd": {
+      "type": "string",
+      "enum": [
+        "target.set_goal",
+        "target.set_trajectory",
+        "gimbal.set_orientation",
+        "gimbal.set_track_mode",
+        "uav.replan_path"
+      ],
+      "description": "Command verb. Each verb has a params shape enforced by the allOf branches below."
+    },
+    "unique_id": {
+      "type": "string",
+      "description": "Target entity unique_id (multi-entity path). Mutually exclusive with `target`."
+    },
+    "target": {
+      "type": "string",
+      "enum": ["target-vehicle", "gimbal", "uav"],
+      "description": "Legacy named-slot target used only when unique_id is absent."
+    },
+    "params": {
+      "type": "object",
+      "description": "Verb-specific payload; shape enforced by the allOf branches below."
+    }
+  },
+  "allOf": [
+    {
+      "description": "target.set_goal: lat/lon destination.",
+      "if": { "properties": { "cmd": { "const": "target.set_goal" } }, "required": ["cmd"] },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+              "longitude": { "type": "number", "minimum": -180, "maximum": 180 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "target.set_trajectory: ordered trajectory points.",
+      "if": { "properties": { "cmd": { "const": "target.set_trajectory" } }, "required": ["cmd"] },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trajectory"],
+            "properties": {
+              "trajectory": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["latitude", "longitude", "time"],
+                  "properties": {
+                    "latitude": { "type": "number" },
+                    "longitude": { "type": "number" },
+                    "time": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "gimbal.set_orientation: pan/tilt angles, degrees.",
+      "if": { "properties": { "cmd": { "const": "gimbal.set_orientation" } }, "required": ["cmd"] },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pan_angle", "tilt_angle"],
+            "properties": {
+              "pan_angle": { "type": "number" },
+              "tilt_angle": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "gimbal.set_track_mode: enable/disable target tracking.",
+      "if": { "properties": { "cmd": { "const": "gimbal.set_track_mode" } }, "required": ["cmd"] },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled"],
+            "properties": { "enabled": { "type": "boolean" } }
+          }
+        }
+      }
+    },
+    {
+      "description": "uav.replan_path: destination waypoint + optional avoidance set.",
+      "if": { "properties": { "cmd": { "const": "uav.replan_path" } }, "required": ["cmd"] },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["destination"],
+            "properties": {
+              "destination": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["latitude", "longitude", "altitude"],
+                "properties": {
+                  "latitude": { "type": "number" },
+                  "longitude": { "type": "number" },
+                  "altitude": { "type": "number" }
+                }
+              },
+              "avoid_waypoints": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["latitude", "longitude", "altitude"],
+                  "properties": {
+                    "latitude": { "type": "number" },
+                    "longitude": { "type": "number" },
+                    "altitude": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

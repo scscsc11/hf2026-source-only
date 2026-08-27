@@ -1,0 +1,12 @@
+# yolotrack example 专用依赖
+# 与 opensim 根 requirements 隔离
+# 安装: pip install -r requirements.txt
+ultralytics>=8.4
+lap>=0.5.12
+opencv-python>=4.8
+numpy>=1.24
+Pillow>=10.0
+
+# 跟踪 / 视频帧处理
+# ultralytics 自带 redis 是可选的；本例里我们用裸 redis-py
+redis>=5.0

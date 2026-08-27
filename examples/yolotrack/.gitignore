@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 运行产物（日志、轨迹 JSON），保留占位目录
+output/
+!output/.gitkeep

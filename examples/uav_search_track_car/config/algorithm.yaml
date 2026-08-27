@@ -1,0 +1,44 @@
+# UAV 搜索跟踪算法配置
+# 修改后重新运行 python -m examples.uav_search_track_car.run 即可生效
+
+# 算法类（spec: "module.path:ClassName"）
+controller: search_track.fsm_controller:FsmSearchTrackController
+
+# 随机种子（null=随机；整数=可复现）
+seed: null
+
+# === 5 个核心可调参数（对应 SC-005） ===
+
+# 搜索模式：spiral | grid
+mode: spiral
+
+# 搜索螺旋最大半径（米）
+search_radius: 500.0
+
+# 搜索高度（AGL，相对地面，米）
+search_altitude_agl: 300.0
+
+# 云台俯仰扫掠周期（秒，搜索时云台正弦扫掠的周期）
+sweep_period: 4.0
+
+# 跟踪 loiter 半径（米）
+loiter_radius: 200.0
+
+# === 进阶参数 ===
+advanced:
+  # 状态切换滞回（帧数；@60Hz）
+  k_acquire: 5
+  k_lost: 60
+
+  # 螺旋增长（米/圈）
+  spiral_growth_rate: 30.0
+
+  # 云台扫掠俯仰角范围（度，负值=向下）
+  sweep_pitch_min: -60.0
+  sweep_pitch_max: -30.0
+
+  # 跟踪 loiter 中心刷新周期（秒）
+  loiter_refresh_period: 3.0
+
+  # 决策频率（Hz，=tick_rate / decision_skip）
+  control_rate_hz: 10

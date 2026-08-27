@@ -1,0 +1,33 @@
+{
+  "_schema_version": "1.0",
+  "_comment": "Gimbal entity preset — config-driven (T4★ stage 1).",
+  "_description": "Defines the gimbal component configuration. A gimbal is a component, not a platform (per spec 012 D-13); this preset assembles a generic Entity with only the gimbal_tracking component.",
+
+  "model_id": "gimbal_default",
+  "model_name": "Dual-Axis Gimbal Default",
+
+  "components": {
+    "gimbal_tracking": {
+      "type": "GimbalTrackingComponent",
+      "enabled": true,
+      "params": {
+        "max_pan_rate": 60.0,
+        "max_tilt_rate": 30.0,
+        "stowed_pan": 0.0,
+        "stowed_tilt": -90.0,
+        "auto_track": false
+      }
+    }
+  },
+
+  "defaults": {
+    "max_pan_rate": 60.0,
+    "max_tilt_rate": 30.0,
+    "default_fov": 60.0,
+    "min_fov": 5.0,
+    "max_fov": 120.0,
+    "initial_pitch": -90.0,
+    "initial_yaw": 0.0,
+    "auto_track": true
+  }
+}

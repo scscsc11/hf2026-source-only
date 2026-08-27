@@ -1,0 +1,53 @@
+{
+  "_schema_version": "1.0",
+  "_comment": "UAV (fixed-wing) entity preset — config-driven (T4★ stage 1).",
+  "_description": "Defines the platform component type and all component types/params for a fixed-wing UAV entity. Users can modify param values to adjust behavior without recompiling.",
+
+  "model_id": "fixed_wing_uav_default",
+  "model_name": "Fixed-Wing UAV Default",
+
+  "platform": {
+    "type": "uav_platform",
+    "params": {
+      "entity_type": "uav",
+      "max_health": 100.0,
+      "initial_health": 100.0
+    }
+  },
+
+  "components": {
+    "kinematics": {
+      "type": "KinematicsComponent",
+      "enabled": true,
+      "params": {
+        "min_speed": 15.0,
+        "max_speed": 40.0,
+        "max_turn_rate": 30.0,
+        "max_acceleration": 5.0,
+        "default_target_speed": 20.0
+      }
+    },
+    "gimbal_tracking": {
+      "type": "GimbalTrackingComponent",
+      "enabled": true,
+      "params": {
+        "max_pan_rate": 60.0,
+        "max_tilt_rate": 30.0,
+        "stowed_pan": 0.0,
+        "stowed_tilt": -90.0,
+        "auto_track": false
+      }
+    }
+  },
+
+  "defaults": {
+    "initial_latitude": 39.5,
+    "initial_longitude": 116.3,
+    "initial_altitude": 500.0,
+    "initial_heading": 0.0,
+    "initial_velocity": 20.0,
+    "default_loiter_radius": 200.0,
+    "default_loiter_direction": "left",
+    "stowed_tilt": -90.0
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"hud-panel.d.ts","sourceRoot":"","sources":["../../../src/ui/hud-panel.ts"],"names":[],"mappings":"AAUA,MAAM,WAAW,eAAe;IAC9B,kCAAkC;IAClC,SAAS,CAAC,EAAE,OAAO,CAAC;IACpB,eAAe;IACf,gBAAgB,CAAC,EAAE,OAAO,CAAC;CAC5B;AASD;;;GAGG;AACH,wBAAgB,YAAY,CAAC,KAAK,EAAE,WAAW,EAAE,IAAI,GAAE,eAAoB,GAAG,IAAI,CAmDjF"}

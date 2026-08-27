@@ -1,0 +1,8 @@
+{
+  "id": "uav_track_road_target",
+  "name": "无人机跟踪道路目标",
+  "description": "无人机跟踪道路目标（terrain 场景）",
+  "scenario": "config/scenario.json",
+  "runner_module": "examples.uav_track_road_target.run",
+  "default_duration": 0.0
+}
