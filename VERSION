@@ -1,0 +1,6 @@
+OpenSim 2.0.0
+Build: 2026-07-25T05:04:44Z
+Platform: win-x64
+Min Windows: 10 1809+
+Node: v22.11.0
+Redis: redis-windows-fork (bundled from C:\Coding\projects\openSim\external\redis)

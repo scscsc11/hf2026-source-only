@@ -1,0 +1,24 @@
+*.pdb
+# Extra exclusions for source-only repo
+__pycache__/
+*.pyc
+*.pyo
+
+node_modules/
+frontend/node_modules/
+
+output/
+outputs/
+logs/
+*.log
+
+dataset/
+bin/
+build/
+python/
+ue-renderer/
+
+*.exe
+*.dll
+*.pak
+*.zip

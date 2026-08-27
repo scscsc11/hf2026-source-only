@@ -1,0 +1,10 @@
+# UE binary assets tracked via Git LFS
+ue-renderer/Windows/testwl/Content/Paks/*.ucas filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/testwl/Content/Paks/*.utoc filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/testwl/Content/Paks/*.pak filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/testwl/Binaries/Win64/*.exe filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/testwl/Binaries/Win64/*.pdb filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/testwl.exe filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/Engine/Binaries/ThirdParty/Vulkan/Win64/*.dll filter=lfs diff=lfs merge=lfs -text
+ue-renderer/Windows/Engine/Binaries/ThirdParty/Windows/WinPixEventRuntime/x64/*.dll filter=lfs diff=lfs merge=lfs -text
+*.zip filter=lfs diff=lfs merge=lfs -text
