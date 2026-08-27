@@ -1,0 +1,89 @@
+{
+  "_comment": "uav_search_track_car example scenario — 1 FixedWingUAV + 1 TargetVehicle. Mirrors root config.json style.",
+  "config_version": "1.0",
+  "simulation": {
+    "tick_rate_hz": 60,
+    "time_scale": 1,
+    "redis_host": "127.0.0.1",
+    "redis_port": 6379,
+    "start_time_str": "2026-06-26 08:00:00",
+    "redis_command_channel": "sim:commands",
+    "redis_state_channel": "sim:state"
+  },
+  "weather": {
+    "type": "Rain"
+  },
+  "entities": [
+    {
+      "id": "10001",
+      "name": "target",
+      "type": "TargetVehicle",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27.002,
+        "initial_longitude": 125.002,
+        "initial_altitude": 0
+      },
+      "components": {
+        "trajectory": {
+          "type": "TargetTrajectoryComponent",
+          "enabled": true,
+          "params": {
+            "speed": 8,
+            "waypoints": [
+              {
+                "lat": 27.002,
+                "lon": 125.007,
+                "alt": 0
+              },
+              {
+                "lat": 26.999,
+                "lon": 125.01,
+                "alt": 0
+              },
+              {
+                "lat": 27.001,
+                "lon": 125.015,
+                "alt": 0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "10002",
+      "name": "uav",
+      "type": "FixedWingUAV",
+      "enabled": true,
+      "params": {
+        "initial_latitude": 27,
+        "initial_longitude": 125,
+        "initial_altitude": 500,
+        "initial_heading": 0
+      },
+      "components": {
+        "kinematics": {
+          "type": "KinematicsComponent",
+          "enabled": true,
+          "params": {
+            "min_speed": 15,
+            "max_speed": 40,
+            "max_bank_angle_deg": 45,
+            "max_climb_rate_ms": 10
+          }
+        },
+        "gimbal_tracking": {
+          "type": "GimbalTrackingComponent",
+          "enabled": true,
+          "params": {
+            "pan_rate_limit_dps": 60,
+            "tilt_rate_limit_dps": 45,
+            "auto_track": false,
+            "fov": 30
+          }
+        }
+      }
+    }
+  ]
+}
