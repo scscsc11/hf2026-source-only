@@ -628,12 +628,19 @@ def inject_astar_target(client, entity: dict, routes_path: str,
 
 
 def inject_astar_decoy(client, entity: dict, routes_path: str,
-                       decoy_speed: float = 5.0,
+                       decoy_speed: Optional[float] = None,
                        arrive_threshold: float = 15.0,
                        rng: Optional[random.Random] = None,
                        route_name: Optional[str] = None,
                        log=print,
                        progress_cb: ProgressCb = None) -> None:
+    # decoy_speed=None → 读场景 trajectory.params.speed（单一事实源，
+    # 镜像 inject_astar_target 的写法）；缺省回落 10.0。
+    traj = (entity.get("components", {}) or {}).get("trajectory", {}) or {}
+    tp = traj.get("params", {}) or {}
+    if decoy_speed is None:
+        decoy_speed = float(tp.get("speed", 10.0))
+
     if decoy_speed <= 0:
         return
 

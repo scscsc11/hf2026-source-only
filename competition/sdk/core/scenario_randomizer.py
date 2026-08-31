@@ -127,7 +127,7 @@ class RandomizePolicy:
         comps = ent.get("components", {}) or {}
         traj = (comps.get("trajectory", {}) or {})
         tparams = traj.get("params", {}) or {}
-        speed = tparams.get("speed", 8.0)
+        speed = tparams.get("speed", 10.0)
         n_wp = 3 + rng.randint(0, 2)
         wps = []
         for _ in range(n_wp):
@@ -183,7 +183,9 @@ class SearchTrackPolicy(RandomizePolicy):
                                 "lon": float(lon0) + wlo, "alt": 0})
                 comps = ent.setdefault("components", {}).setdefault(
                     "trajectory", {}).setdefault("params", {})
-                comps["speed"] = 8.0
+                comps["speed"] = 10.0
+                comps["speed_jitter"] = 1.5
+                comps["speed_jitter_seed"] = int(ent.get("id") or 0)
                 comps["waypoints"] = wps
 
 

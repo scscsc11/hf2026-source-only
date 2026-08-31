@@ -1,7 +1,7 @@
 #!/bin/bash
-# start.sh — Simulation release 包一键启动（Redis + bridge + 前端静态服务）
-# 引擎和 UE 不在此启动 —— 用户在前端点赛题时由 competition/bridge 按需 spawn。
-# 复刻 start_3dweb.sh 的「只起前端基础设施」模型。
+# start.sh — Simulation release 包一键启动（Redis + bridge + 本地 UE + 前端静态服务）
+# 复刻 start_3dweb.sh 的启动模型：UE 在新终端窗口前台跑 run.sh，bridge 通过
+# Redis 发现(renderer_online)。引擎(opensim-sim)由 competition 在前端点赛题时 spawn。
 
 set -eu
 
@@ -35,7 +35,7 @@ mkdir -p "$LOG_DIR" "$PID_DIR" "$RUN_DIR/redis"
 
 # ── 0. 关闭本包的现存进程（上次异常退出留下的孤儿），复刻 start_3dweb.sh step 1 ──
 echo ""
-echo "[0/4] 清理现存进程..."
+echo "[0/5] 清理现存进程..."
 # pidfile 记录的进程
 for pf in "$PID_DIR"/*.pid; do
     [ -f "$pf" ] || continue
@@ -158,7 +158,7 @@ echo "=== Simulation 启动中 ==="
 
 # 1. Redis（纯内存模式）
 if ! alive "$PID_DIR/redis.pid"; then
-    echo "[1/4] 启动 Redis (port $OPENSIM_REDIS_PORT, 纯内存)..."
+    echo "[1/5] 启动 Redis (port $OPENSIM_REDIS_PORT, 纯内存)..."
     # --bind 0.0.0.0 --protected-mode no: 多机部署时远程 UE 需跨机连 Redis。
     # 仅绑回环的默认配置会让远程 UE 连不上(内网部署,protected-mode 关闭可接受)。
     "$PACK_ROOT/bin/redis-server" --port "$OPENSIM_REDIS_PORT" \
@@ -172,12 +172,12 @@ if ! alive "$PID_DIR/redis.pid"; then
     done
     "$PACK_ROOT/bin/redis-cli" -p "$OPENSIM_REDIS_PORT" ping >/dev/null 2>&1 || { echo "✗ Redis 启动失败"; exit 1; }
 else
-    echo "[1/4] Redis 已在运行，跳过"
+    echo "[1/5] Redis 已在运行，跳过"
 fi
 
 # 2. bridge（用包内 node + 编译产物）
 if ! alive "$PID_DIR/bridge.pid"; then
-    echo "[2/4] 启动 bridge (WS :$OPENSIM_WS_PORT, CAM :$OPENSIM_CAM_PORT, CAMWS :$OPENSIM_CAM_WS_PORT)..."
+    echo "[2/5] 启动 bridge (WS :$OPENSIM_WS_PORT, CAM :$OPENSIM_CAM_PORT, CAMWS :$OPENSIM_CAM_WS_PORT)..."
     export NODE_PATH="$PACK_ROOT/lib/node_modules"
     export OPENSIM_RENDER_CTL_BIN="$PACK_ROOT/opensim-render-ctl"
     export OPENSIM_RENDERERS_DIR="$PACK_ROOT/config/renderers"
@@ -195,12 +195,89 @@ if ! alive "$PID_DIR/bridge.pid"; then
         sleep 0.25
     done
 else
-    echo "[2/4] bridge 已在运行，跳过"
+    echo "[2/5] bridge 已在运行，跳过"
 fi
 
-# 3. 前端静态服务
+# 3. 本地 UE 渲染器（前台终端窗口跑 run.sh）
+# 复刻 start_3dweb.sh step 3.5：扫 config/renderers/*.json（template/占位符不算）拿 workdir，
+# 开新终端窗口前台跑 run.sh。bridge 不 spawn UE，只通过 Redis 发现(renderer_online)，
+# 所以 UE 必须由本脚本拉起，否则点击无人机无视频流。
+# 标准包(无 ue_testwl.json，只有 template)会因下面 for 循环找不到非 template 的 .json 而整段跳过。
+echo ""
+UE_STARTED=0
+if [ -d "$PACK_ROOT/config/renderers" ]; then
+    for cfg in "$PACK_ROOT/config/renderers"/*.json; do
+        [ -f "$cfg" ] || continue
+        case "$(basename "$cfg")" in *.template.json) continue;; esac
+        UE_WORKDIR=$("$PYTHON_BIN" -c "import json; d=json.load(open('$cfg')); print(d.get('executable',{}).get('workdir',''))" 2>/dev/null || true)
+        [ -z "$UE_WORKDIR" ] && continue
+        case "$UE_WORKDIR" in \<*\>) continue;; esac
+        # workdir 在打包版 ue_testwl.json 里是相对包根的路径(如 20260721-1622_Shipping/x86/Linux),
+        # gnome-terminal/xterm 新窗口的工作目录不是包根,相对 cd 会失败 —— 转成绝对路径。
+        case "$UE_WORKDIR" in
+            /*) ;;
+            *)  UE_WORKDIR="$PACK_ROOT/$UE_WORKDIR" ;;
+        esac
+        if [ -d "$UE_WORKDIR" ] && [ -f "$UE_WORKDIR/run.sh" ]; then
+            # 同步实际 redis 端口到 UE 自己的配置。
+            # UE 读 redis 端口有两处(按构建版本不同,宁可信其有,两处都同步):
+            #   1. testwl/Content/Config/scenario*.json 的 simulation.redis_port(旧路径)
+            #   2. testwl/Content/Config/capture_config.json 的 redis.port
+            #      (新路径:Shipping 包命令行不可用,UE 从此文件读运行时配置)
+            # 本包 redis 可能因端口冲突顺延(如 6382)—— 不同步则 UE 连到错误 redis,
+            # bridge 永远收不到 renderer_online,无人机无视频流。
+            UE_CFG_DIR="$UE_WORKDIR/testwl/Content/Config"
+            if [ -d "$UE_CFG_DIR" ]; then
+                for ue_sj in "$UE_CFG_DIR"/scenario*.json; do
+                    [ -f "$ue_sj" ] || continue
+                    "$PYTHON_BIN" -c "
+import json
+with open('$ue_sj') as f: d=json.load(f)
+d.setdefault('simulation',{})['redis_port']=$OPENSIM_REDIS_PORT
+d['simulation']['redis_host']='127.0.0.1'
+with open('$ue_sj','w') as f: json.dump(d,f,indent=2,ensure_ascii=False)
+" 2>/dev/null || echo "    ⚠️  改写 UE $(basename "$ue_sj") 失败(UE 可能连错 redis)"
+                done
+                UE_CC="$UE_CFG_DIR/capture_config.json"
+                if [ -f "$UE_CC" ]; then
+                    "$PYTHON_BIN" -c "
+import json
+with open('$UE_CC') as f: d=json.load(f)
+d.setdefault('redis',{})['host']='127.0.0.1'
+d['redis']['port']=$OPENSIM_REDIS_PORT
+with open('$UE_CC','w') as f: json.dump(d,f,indent=2,ensure_ascii=False)
+" 2>/dev/null || echo "    ⚠️  改写 UE capture_config.json 失败(UE 可能连错 redis)"
+                fi
+                echo "  [3/5] 已同步 redis_port=$OPENSIM_REDIS_PORT 到 UE scenario*.json + capture_config.json"
+            fi
+            if command -v gnome-terminal >/dev/null 2>&1; then
+                gnome-terminal --title="UE Renderer (service)" -- bash -c "cd '$UE_WORKDIR' && ./run.sh 2>&1 | tee '$LOG_DIR/ue.log'; echo '[UE 已退出,按回车关闭窗口]'; read" &
+                echo "  [3/5] 本地 UE 已在新终端窗口启动(workdir: $UE_WORKDIR)"
+                echo "        Ctrl+C 或关窗口退出 UE;关 bridge 时 UE 自动 shutdown"
+                echo "        UE 日志: tail -f $LOG_DIR/ue.log"
+            elif command -v xterm >/dev/null 2>&1; then
+                xterm -title "UE Renderer (service)" -e bash -c "cd '$UE_WORKDIR' && ./run.sh 2>&1 | tee '$LOG_DIR/ue.log'" &
+                echo "  [3/5] 本地 UE 已在 xterm 窗口启动(workdir: $UE_WORKDIR)"
+                echo "        UE 日志: tail -f $LOG_DIR/ue.log"
+            else
+                # 无终端模拟器(如无头服务器): nohup 后台跑,输出落 ue.log
+                nohup bash -c "cd '$UE_WORKDIR' && ./run.sh" > "$LOG_DIR/ue.log" 2>&1 &
+                echo "  [3/5] ⚠ 无 gnome-terminal/xterm,UE 已后台启动(PID $!)"
+                echo "        UE 日志: tail -f $LOG_DIR/ue.log"
+            fi
+            UE_STARTED=1
+            break  # 一个终端窗口跑一个 UE service 实例即可(内部按 capacity 承载多机)
+        else
+            echo "  [3/5] ⚠ $(basename "$cfg") 的 workdir 无效或无 run.sh,本地 UE 需手动启动"
+            echo "        workdir=$UE_WORKDIR"
+        fi
+    done
+fi
+[ "$UE_STARTED" = "0" ] && echo "  [3/5] 无可用 UE 渲染器配置(标准包),跳过本地 UE 启动 —— 渲染走 Three.js 自渲染"
+
+# 4. 前端静态服务
 if ! alive "$PID_DIR/frontend.pid"; then
-    echo "[3/4] 启动前端静态服务 (:$OPENSIM_WEB_PORT)..."
+    echo "[4/5] 启动前端静态服务 (:$OPENSIM_WEB_PORT)..."
     nohup "$PACK_ROOT/bin/node" "$PACK_ROOT/static-server.js" "$PACK_ROOT/frontend" "$OPENSIM_WEB_PORT" \
         < /dev/null > "$LOG_DIR/frontend.log" 2>&1 &
     echo $! > "$PID_DIR/frontend.pid"
@@ -209,7 +286,7 @@ if ! alive "$PID_DIR/frontend.pid"; then
         sleep 0.25
     done
 else
-    echo "[3/4] 前端已在运行，跳过"
+    echo "[4/5] 前端已在运行，跳过"
 fi
 
 echo ""

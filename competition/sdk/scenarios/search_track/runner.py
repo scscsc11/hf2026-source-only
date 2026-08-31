@@ -5,8 +5,10 @@ Wires the SearchTrackAgent into RunnerBase. Scenario-specific bits:
   * briefing: fleet_size=1, mission_area from scenario.json
   * scoring: profile_uav_search_track_car (K=1, dwell=300s linear)
   * score_extras: search_time + track_in_view_fraction (stability dims)
-  * inject_startup: activate the target vehicle via A* navigation
-    (replaces original set_trajectory waypoint playback with A* path planning)
+
+Spec 037 (engine-side route spawn)：真目标选路与 UAV 出生锚定已迁入 C++ 引擎
+（scenario.json 声明 engine_route_spawn + spawn_anchor，引擎按 simulation.seed
+选路并锚定）。本 runner 不再做任何出生位置决策——只保留观测/评分/Agent 调用。
 """
 from __future__ import annotations
 
@@ -16,15 +18,14 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from ...core.observation import AreaSpec, MissionBriefing
-from ...core.runner import RunnerBase, ScenarioConfig, read_weather, resolve_scenario_seed
+from ...core.runner import (
+    RunnerBase, ScenarioConfig, read_perception_range, read_weather,
+    resolve_scenario_seed,
+)
 from ...core.scoring import (
     ScoringProfile, profile_uav_search_track_car,
 )
 from ...core.world_state import WorldState
-from .._astar_navigator import (
-    inject_astar_target, assign_routes, _build_waypoints, inject_startup_concurrent,
-    make_route_progress_cb, count_injectable_vehicles, publish_regenerate_zones,
-)
 
 
 class SearchTrackRunner(RunnerBase):
@@ -35,24 +36,22 @@ class SearchTrackRunner(RunnerBase):
         super().__init__(cfg, log)
         self.agent_cls = agent_cls
         self._scenario_cfg = self._load_scenario(cfg.scenario_path)
-        # uid → 选定路线名（prepare_scenario 选路时记录，inject_startup 用）
-        self._route_assignment: Dict[str, str] = {}
 
     # ── briefing ──────────────────────────────────────────────────────
 
     def build_briefing(self, world_state: WorldState,
                        entity_uid: str) -> MissionBriefing:
         area = self._mission_area()
-        # C2/C3: 白名单 params，不转储整份 scenario；赛题一给目标初始位置
+        # Spec 037：出生由引擎决定，scenario.json 静态 initial_* 已不代表
+        # 实际出生点。目标初始位置改读首帧真值（引擎选路后在 kIdle 也会
+        # 发布状态，world_state.targets 即路线起点）。
         target_pos = None
         target_speed = 8.0
+        for tgt in world_state.targets.values():
+            target_pos = (tgt.lat, tgt.lon)
+            break
         for ent in self._scenario_cfg.get("entities", []):
             if ent.get("type") in ("TargetVehicle", "ground_vehicle"):
-                p = ent.get("params", {}) or {}
-                lat = p.get("initial_latitude")
-                lon = p.get("initial_longitude")
-                if lat is not None and lon is not None:
-                    target_pos = (float(lat), float(lon))
                 tp = (ent.get("components", {}) or {}).get("trajectory", {}).get("params", {}) or {}
                 target_speed = float(tp.get("speed", 8.0))
                 break
@@ -92,121 +91,17 @@ class SearchTrackRunner(RunnerBase):
     # ── startup injection ─────────────────────────────────────────────
 
     def prepare_scenario(self) -> None:
-        """引擎启动前：为真目标选路线，把路线 Start 写入 initial_*。
+        """Spec 037：出生决策已迁引擎，这里只解析并固化 seed。
 
-        真小车选路规则（需求 2026-07-16）：
-          * 前端填了种子（seed>0）→ ``(seed+offset)%N`` 确定选路，可复现；
-          * 前端不填（seed==0）→ 随机选路，每次仿真不同。
-        同一次仿真内只有一个真目标，无需考虑多实体互不相同。
-        把路线 Start 写进 initial_*，引擎直接把真目标生成在路线起点，
-        不需要 set_position 瞬移，也不会在可视化上留下瞬移的红色连线。
-        选定的路线名记到 _route_assignment，inject_startup 按名取路。
+        seed 语义不变：前端/CLI --seed > 0 → 可复现（引擎按 (seed+0)%N 选路
+        + splitmix64 锚定）；seed == 0 → 每局真随机。resolve 后写回 cfg.seed，
+        供 core/runner 的 randomize_scenario 与引擎 simulation.seed 使用。
         """
-        import random as _random
         seed = resolve_scenario_seed(getattr(self.cfg, "seed", 0) or 0,
                                      getattr(self, "_scenario_cfg", None))
         self.cfg.seed = seed
-        rng = _random.Random(seed) if seed > 0 else _random.Random()
-
-        repo_root = Path(__file__).resolve().parents[4]
-        routes_path = str(repo_root / "config" / "points.json")
-
-        # 真小车选路：seed>0 确定；seed==0 随机（每次仿真不同）。
-        n_targets = sum(1 for e in self._scenario_cfg.get("entities", [])
-                        if e.get("type") in ("TargetVehicle", "ground_vehicle"))
-        target_routes = assign_routes(routes_path, n_targets,
-                                       seed=seed, rng=rng)
-
-        target_idx = 0
-        for ent in self._scenario_cfg.get("entities", []):
-            if ent.get("type") not in ("TargetVehicle", "ground_vehicle"):
-                continue
-            route = (target_routes[target_idx]
-                     if target_idx < len(target_routes) else None)
-            target_idx += 1
-            if not route:
-                continue
-            wps = _build_waypoints(route)
-            if not wps:
-                continue
-            start = wps[0]
-            uid = str(ent.get("id") or ent.get("name") or "")
-            ent.setdefault("params", {})
-            ent["params"]["initial_latitude"] = start["lat"]
-            ent["params"]["initial_longitude"] = start["lon"]
-            ent["params"]["initial_altitude"] = 0.0
-            # 清空预设 waypoints，避免可视化显示原来的红色路线
-            traj = ent.get("components", {}).get("trajectory", {})
-            traj.setdefault("params", {})["waypoints"] = []
-            self._route_assignment[uid] = route.get("Name", "")
-            self.log(f"[search_track] 实体 {uid} 起点设为路线 "
-                     f"'{route.get('Name', '')}' 的 Start "
-                     f"({start['lat']:.6f}, {start['lon']:.6f})")
-            break  # search_track 只有一个真目标
-
-    def inject_startup(self, client, first: WorldState) -> None:
-        """Activate the target vehicle via A* navigation (并发入口统一).
-
-        真目标按 prepare_scenario 选定的路线（_route_assignment）注入 A*
-        分段导航。search_track 仅 1 真目标, 并发收益小但入口统一 (DRY)。
-        """
-        import os
-        import random as _random
-        seed = getattr(self.cfg, "seed", 0) or 0
-
-        # runner.py 在 competition/sdk/scenarios/search_track/ 下,
-        # parents[4] = 仓库根
-        repo_root = Path(__file__).resolve().parents[4]
-        routes_path = str(repo_root / "config" / "points.json")
-
-        # routes_by_type: search_track 只有真小车, 统一 points.json。
-        routes_by_type = {
-            "TargetVehicle": routes_path,
-            "ground_vehicle": routes_path,
-        }
-        entities = self._scenario_cfg.get("entities", [])
-        # 合计所有可注入车辆数 → 进度回调的分母。批量版每车一次 astar_plan_batch,
-        # 进度按"每完成一辆车 +1"上报, 故分母用车辆数而非段数。
-        total_units = count_injectable_vehicles(entities, routes_by_type,
-                                                self._route_assignment)
-        # 构造线程安全的车辆级进度回调 (total_units<=0 时为 no-op)。
-        progress_cb = make_route_progress_cb(client, total_units, log=self.log)
-
-        def _inject_one(ent: dict) -> None:
-            if ent.get("type") in ("TargetVehicle", "ground_vehicle"):
-                uid = str(ent.get("id") or ent.get("name") or "")
-                route_name = self._route_assignment.get(uid)
-                # 每实体独立 RNG: random.Random 非线程安全, 并发下避免共享状态竞态。
-                local_seed = (seed + hash(uid)) & 0xFFFFFFFF if seed > 0 else None
-                local_rng = _random.Random(local_seed)
-                inject_astar_target(
-                    client=client, entity=ent,
-                    routes_path=routes_path,
-                    rng=local_rng, log=self.log,
-                    route_name=route_name,
-                    progress_cb=progress_cb,
-                )
-
-        workers = int(os.environ.get("OPENSIM_INJECT_WORKERS", "8"))
-        inject_startup_concurrent(
-            client, self._scenario_cfg.get("entities", []),
-            inject_fn=_inject_one, max_workers=workers, log=self.log)
-
-        # 通知引擎基于注入后的真实路线重配静态 zone(详见 _astar_navigator
-        # publish_regenerate_zones 文档)。无 generate 块时为 no-op。
-        publish_regenerate_zones(client)
-        # NOTE: 以下 set_speed/set_trajectory 兜底是重构前的死代码——
-        # wps / target_uid / speed 三个变量在新版 inject_astar_target 路径下
-        # 已不再定义，执行到此必抛 NameError。注入逻辑现由上面的
-        # inject_astar_target 全权负责，故注释禁用。若后续要恢复直发
-        # waypoints 的降级兜底，需重新从 scenario.json 取 wps/speed/uid。
-        # if wps:
-        #     client.publish_raw({
-        #         "unique_id": target_uid or "10001",
-        #         "cmd": "set_speed", "params": {"speed": speed}})
-        #     client.publish_raw({
-        #         "unique_id": target_uid or "10001",
-        #         "cmd": "set_trajectory", "params": {"waypoints": wps}})
+        self.log(f"[search_track] seed={seed}；选路与 UAV 锚定由引擎完成"
+                 f"（engine_route_spawn）")
 
     # ── helpers ───────────────────────────────────────────────────────
 
@@ -231,6 +126,8 @@ def run(agent_cls, *, duration: float = 600.0, scenario: str | None = None,
         open_browser: bool = True,
         mode: str = "train", photo_mode: str = "auto",
         accuracy: float = 0.85, noise_sigma_m: float = 50.0,
+        max_detection_range_m: float | None = None,
+        full_accuracy_range_m: float | None = None,
         yolo_model_path: str = "") -> dict:
     """Convenience entry point for players.
 
@@ -242,12 +139,20 @@ def run(agent_cls, *, duration: float = 600.0, scenario: str | None = None,
       * ``mode`` — "train" (AccuracySimulator) | "eval" (YoloDetector)
       * ``photo_mode`` — 相机帧拉取模式：auto(默认)/on/off（见 ScenarioConfig）
       * ``accuracy`` / ``noise_sigma_m`` — AccuracySimulator params
+      * ``max_detection_range_m`` / ``full_accuracy_range_m`` — 距离门限
+        （None = 读 scenario.json perception 块；max 0 = 禁用，full 0 = 从 0 起衰减）
       * ``yolo_model_path`` — YOLO model path (eval mode)
     """
     from . import DEFAULT_SCENARIO_JSON
+    scenario_path = scenario or DEFAULT_SCENARIO_JSON
+    pr = read_perception_range(scenario_path)
+    if max_detection_range_m is None:
+        max_detection_range_m = pr["max_detection_range_m"]
+    if full_accuracy_range_m is None:
+        full_accuracy_range_m = pr["full_accuracy_range_m"]
     cfg = ScenarioConfig(
         scenario_name="search_track",
-        scenario_path=scenario or DEFAULT_SCENARIO_JSON,
+        scenario_path=scenario_path,
         duration_s=duration,
         redis_host=host, redis_port=port,
         output_dir=output_dir,
@@ -260,5 +165,8 @@ def run(agent_cls, *, duration: float = 600.0, scenario: str | None = None,
         photo_mode=photo_mode,
         accuracy=accuracy, noise_sigma_m=noise_sigma_m,
         yolo_model_path=yolo_model_path,
+        weather=read_weather(scenario_path),
+        max_detection_range_m=max_detection_range_m,
+        full_accuracy_range_m=full_accuracy_range_m,
     )
     return SearchTrackRunner(cfg, agent_cls).run()

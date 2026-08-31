@@ -118,12 +118,17 @@ foreach ($pf in $pidFiles) {
     Remove-Item $pf.FullName -Force -ErrorAction SilentlyContinue
 }
 
-# 外部残留进程（bridge / opensim-sim / 本包 static-server）
+# 外部残留进程（跨仓库孤儿也清：上一次 start.ps1/start_3dweb.ps1 从别的包/仓库跑
+# 留下的 bridge / sim / competition / redis 会被本包的端口/Redis 抢占或配置串台）。
 $allProcs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
 $patterns = @(
     'dist-bridge[\\/]bridge[\\/]index\.js',
+    'ts-node.*bridge',                     # 开发环境(start_3dweb)起的 bridge 孤儿
+    'webpack serve',                        # 开发环境前端 dev server 孤儿
     'opensim-sim',
-    'static-server\.js.*frontend'
+    'static-server\.js.*frontend',
+    'competition.*run',                     # competition controller (python -m competition run)
+    'redis-server.*\.exe'                   # 任何 Redis 实例（下面 §1 会重新起一个）
 )
 foreach ($pat in $patterns) {
     $matched = $allProcs | Where-Object { $_.CommandLine -and $_.CommandLine -match $pat }
@@ -146,7 +151,8 @@ if (Test-Path $renderersDir) {
         if ($r.Name -like '*.template.json') { continue }
         $workdir = $null
         try {
-            $cfg = Get-Content $r.FullName -Raw | ConvertFrom-Json
+            # 显式 UTF-8,避免无 BOM 文件被 PS 5.1 按 ANSI 误读(workdir 可能含中文路径)
+            $cfg = [System.IO.File]::ReadAllText($r.FullName, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
             $workdir = $cfg.executable.workdir
         } catch {}
         if (-not $workdir) { continue }

@@ -2,6 +2,7 @@
 
 meters_to_deg: 米 → 经纬度偏移（AccuracySimulator 噪声用）。
 pan_tilt_to_latlon: pan/tilt delta → 目标 lat/lon（YoloDetector 用，Task 4 追加）。
+latlon_distance_m: 两经纬度点水平距离（AccuracySimulator 距离衰减用）。
 """
 from __future__ import annotations
 
@@ -17,6 +18,20 @@ def meters_to_deg(meters: float, lat: float, is_lon: bool) -> float:
         cos_lat = max(math.cos(math.radians(lat)), 1e-6)
         return meters / (_M_PER_DEG_LAT * cos_lat)
     return meters / _M_PER_DEG_LAT
+
+
+def latlon_distance_m(lat1: float, lon1: float,
+                      lat2: float, lon2: float) -> float:
+    """两经纬度点的水平距离（米）。
+
+    equirectangular 近似，与 meters_to_deg 同口径（纬度 1 度 ≈ 111320 米，
+    经度按平均纬度的 cos 缩放）。AccuracySimulator 距离衰减用。
+    假设两点位于同一局部区域（不跨日期变更线/极点），全球尺度请勿使用。
+    """
+    mean_lat = math.radians((lat1 + lat2) / 2.0)
+    d_lat_m = (lat2 - lat1) * _M_PER_DEG_LAT
+    d_lon_m = (lon2 - lon1) * _M_PER_DEG_LAT * math.cos(mean_lat)
+    return math.hypot(d_lat_m, d_lon_m)
 
 
 def pan_tilt_to_latlon(uav_lat: float, uav_lon: float, uav_alt: float,

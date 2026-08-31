@@ -134,6 +134,9 @@ class ScenarioConfig:
     noise_sigma_m: float = 50.0      # AccuracySimulator 位置噪声（米，钳制下界 30）
     yolo_model_path: str = ""        # YoloDetector 模型路径（eval 模式）
     weather: str = "Clear_Skies"     # 场景天气（来自 scenario.json），影响 detection 衰减
+    # 距离门限（spec 2026-08-26-perception-range-decay）：0 = 禁用（现状）。
+    max_detection_range_m: float = 0.0
+    full_accuracy_range_m: float = 0.0   # 0 = 从 0 起线性衰减；钳制到 [0, max]
 
     # 防真值泄漏钳制：accuracy 上界 0.9（杜绝 acc=1.0 退化等价真值），
     # noise_sigma_m 下界 30m（杜绝 noise=0 位置等于真值）。所有配置入口
@@ -147,6 +150,11 @@ class ScenarioConfig:
             self.accuracy = self.ACCURACY_MAX
         if self.noise_sigma_m < self.NOISE_SIGMA_MIN:
             self.noise_sigma_m = self.NOISE_SIGMA_MIN
+        # 距离门限钳制：负 max → 0（禁用）；full → [0, max]。
+        if self.max_detection_range_m < 0:
+            self.max_detection_range_m = 0.0
+        self.full_accuracy_range_m = min(max(0.0, self.full_accuracy_range_m),
+                                         self.max_detection_range_m)
         # 校验 photo_mode 合法取值（auto/on/off）。
         self.photo_mode = resolve_photo_mode(self.photo_mode)
 
@@ -167,6 +175,32 @@ def read_weather(scenario_path: Optional[str]) -> str:
         return str(wtype) if wtype else "Clear_Skies"
     except Exception:
         return "Clear_Skies"
+
+
+def read_perception_range(scenario_path: Optional[str]) -> dict:
+    """从 scenario.json 顶层 ``perception`` 块读取距离门限参数。
+
+    返回 ``{"max_detection_range_m": .., "full_accuracy_range_m": ..}``；
+    缺失/读取失败时兜底全 0（禁用距离门限，现状行为）。供 CLI /
+    场景 ``run()`` 在构造 :class:`ScenarioConfig` 前调用——与
+    :func:`read_weather` 同款模式（组织方场景级配置入口）。
+    """
+    defaults = {"max_detection_range_m": 0.0, "full_accuracy_range_m": 0.0}
+    if not scenario_path:
+        return defaults
+    try:
+        import json as _json
+        data = _json.loads(Path(scenario_path).read_text(encoding="utf-8-sig"))
+        p = data.get("perception") or {}
+        result = dict(defaults)
+        for k in result:
+            if k in p:
+                result[k] = float(p[k])
+        return result
+    except Exception:
+        print(f"[runner] perception block malformed in {scenario_path}; "
+              f"range gate disabled", file=sys.stderr)
+        return defaults
 
 
 class RunnerBase:
@@ -220,7 +254,9 @@ class RunnerBase:
             photo_cache.start()
         fallback_det = AccuracySimulator(
             accuracy=self.cfg.accuracy, noise_sigma_m=self.cfg.noise_sigma_m,
-            weather=self.cfg.weather)
+            weather=self.cfg.weather,
+            max_detection_range_m=self.cfg.max_detection_range_m,
+            full_accuracy_range_m=self.cfg.full_accuracy_range_m)
         # 默认识别器：train → AccuracySimulator；eval → YoloDetector + fallback
         if self.cfg.run_mode == "eval" and self.cfg.yolo_model_path:
             default_det = YoloDetector(

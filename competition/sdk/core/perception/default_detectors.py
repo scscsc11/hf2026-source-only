@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from ..observation import Detection, Observation
 from .base import BaseDetector
-from .bbox_to_latlon import meters_to_deg, pan_tilt_to_latlon   # DRY: 共用几何工具
+from .bbox_to_latlon import latlon_distance_m, meters_to_deg, pan_tilt_to_latlon   # DRY: 共用几何工具
 
 # ── 天气衰减系数表 ────────────────────────────────────────────────────
 # 每项 = (accuracy_factor, noise_factor)，与渲染端 6 种天气枚举一一对应
@@ -40,18 +40,44 @@ class AccuracySimulator(BaseDetector):
     ``weather`` 按天气类型对 base accuracy/noise 施加乘性衰减（见
     :data:`WEATHER_FACTORS`）：晴天不衰减，恶劣天气检出率下降、噪声增大。
     衰减在 detect() 运行时内部施加，不污染构造时传入的 base 值。
+
+    ``max_detection_range_m`` / ``full_accuracy_range_m`` 距离门限
+    （spec 2026-08-26-perception-range-decay）：本机与真值目标的水平
+    距离在 full 内不衰减，之后 accuracy 线性降至 max 处 0（必检不出）。
+    默认 0 = 禁用（现状行为）。与 C++ 引擎侧 max_detection_range 硬门限
+    正交：C++ 管几何真值层，本层管统计采样。真值无坐标
+    （target_lat/lon=None）时跳过距离衰减（与不加噪口径一致）。
     """
 
     def __init__(self, accuracy: float, noise_sigma_m: float,
                  weather: str = "Clear_Skies",
-                 rng_seed: Optional[int] = None) -> None:
+                 rng_seed: Optional[int] = None,
+                 max_detection_range_m: float = 0.0,
+                 full_accuracy_range_m: float = 0.0) -> None:
         self.accuracy = float(accuracy)
         self.noise_sigma_m = float(noise_sigma_m)
         acc_f, noise_f = WEATHER_FACTORS.get(weather, _CLEAR_SKY)
         self.weather = weather
         self.effective_accuracy = round(self.accuracy * acc_f, 6)
         self.effective_noise_sigma_m = round(self.noise_sigma_m * noise_f, 6)
+        # 距离门限（米）：0 = 禁用（现状行为）。full 钳制到 [0, max]。
+        self.max_detection_range_m = max(0.0, float(max_detection_range_m))
+        self.full_accuracy_range_m = min(max(0.0, float(full_accuracy_range_m)),
+                                         self.max_detection_range_m)
         self._rng = random.Random(rng_seed) if rng_seed is not None else random.Random()
+
+    def _range_factor(self, distance_m: float) -> float:
+        """距离衰减因子：full 内 1.0 → max 处线性降至 0；max=0 禁用恒 1.0。"""
+        if self.max_detection_range_m <= 0.0:
+            return 1.0
+        if distance_m <= self.full_accuracy_range_m:
+            return 1.0
+        if distance_m >= self.max_detection_range_m:
+            return 0.0
+        span = self.max_detection_range_m - self.full_accuracy_range_m
+        if span <= 0.0:   # full == max：阶跃（full 处 1.0，超即 0）
+            return 0.0
+        return (self.max_detection_range_m - distance_m) / span
 
     def detect(self, obs: Observation, dt: float,
                truth_source: Optional[Detection] = None) -> List[Detection]:
@@ -60,20 +86,26 @@ class AccuracySimulator(BaseDetector):
         if not truth.detected:
             return [Detection(detected=False, confidence=0.0,
                               target_type=truth.target_type)]
-        # 伯努利检出（用天气衰减后的 effective accuracy）
-        if self._rng.random() > self.effective_accuracy:
+        # 帧级 effective accuracy = 天气衰减 × 距离因子（距离每帧变化，
+        # 必须运行时乘，不能在构造时固化）
+        lat = truth.target_lat
+        lon = truth.target_lon
+        eff_acc = self.effective_accuracy
+        if self.max_detection_range_m > 0 and lat is not None and lon is not None:
+            d = latlon_distance_m(obs.self.lat, obs.self.lon, lat, lon)
+            eff_acc = eff_acc * self._range_factor(d)
+        # 伯努利检出（eff_acc=0 时恒不检出）
+        if self._rng.random() > eff_acc:
             return [Detection(detected=False, confidence=0.0,
                               target_type=truth.target_type)]
         # 命中：位置加高斯噪声（用天气衰减后的 effective noise）
-        lat = truth.target_lat
-        lon = truth.target_lon
         if self.effective_noise_sigma_m > 0 and lat is not None and lon is not None:
             d_lat = self._rng.gauss(0, meters_to_deg(self.effective_noise_sigma_m, lat, False))
             d_lon = self._rng.gauss(0, meters_to_deg(self.effective_noise_sigma_m, lat, True))
             lat += d_lat
             lon += d_lon
-        # confidence ∈ [eff_accuracy*0.8, eff_accuracy]
-        lo, hi = self.effective_accuracy * 0.8, self.effective_accuracy
+        # confidence ∈ [eff_acc*0.8, eff_acc]（帧级值，含距离衰减）
+        lo, hi = eff_acc * 0.8, eff_acc
         conf = self._rng.uniform(lo, hi) if hi > lo else hi
         return [Detection(detected=True, confidence=round(conf, 4),
                           target_lat=lat, target_lon=lon,

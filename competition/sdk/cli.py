@@ -115,6 +115,13 @@ def main(argv=None) -> int:
                        help="AccuracySimulator 检出概率 (train 模式)")
     run_p.add_argument("--noise-sigma", type=float, default=50.0,
                        help="AccuracySimulator 位置噪声标准差（米）")
+    run_p.add_argument("--max-detection-range", type=float, default=None,
+                       help="AccuracySimulator 最大探测距离（米），超出必检不出；"
+                            "缺省读 scenario.json perception.max_detection_range_m；"
+                            "0=禁用")
+    run_p.add_argument("--full-accuracy-range", type=float, default=None,
+                       help="满精度距离（米），以内不做距离衰减；"
+                            "缺省读 scenario.json perception.full_accuracy_range_m")
     run_p.add_argument("--yolo-model", default="",
                        help="YoloDetector 模型路径 (eval 模式)")
     run_p.add_argument("--quiet", action="store_true")
@@ -139,6 +146,14 @@ def main(argv=None) -> int:
         print(f"[cli] --noise-sigma {args.noise_sigma} below 30m floor; clamped to 30.0")
         args.noise_sigma = 30.0
 
+    # 距离门限：显式负值钳 0；None 透传（run() 内回退读 scenario.json perception 块）。
+    if args.max_detection_range is not None and args.max_detection_range < 0:
+        print(f"[cli] --max-detection-range {args.max_detection_range} negative; "
+              f"clamped to 0 (disabled)")
+        args.max_detection_range = 0.0
+    if args.full_accuracy_range is not None and args.full_accuracy_range < 0:
+        args.full_accuracy_range = 0.0
+
     # 相机帧模式：单一三态开关 auto/on/off（默认 auto = 非 dry_run 自动拉取 UE 帧）。
     photo_mode = args.photo_mode
 
@@ -158,6 +173,8 @@ def main(argv=None) -> int:
             mode=args.mode, photo_mode=photo_mode,
             accuracy=args.accuracy, noise_sigma_m=args.noise_sigma,
             yolo_model_path=args.yolo_model,
+            max_detection_range_m=args.max_detection_range,
+            full_accuracy_range_m=args.full_accuracy_range,
             **viz_kwargs, **common)
     elif args.scenario == "coop_decoy":
         from competition.sdk.scenarios.coop_decoy import run
@@ -166,6 +183,8 @@ def main(argv=None) -> int:
             mode=args.mode, photo_mode=photo_mode,
             accuracy=args.accuracy, noise_sigma_m=args.noise_sigma,
             yolo_model_path=args.yolo_model,
+            max_detection_range_m=args.max_detection_range,
+            full_accuracy_range_m=args.full_accuracy_range,
             **viz_kwargs, **common)
     elif args.scenario == "adversarial_swarm":
         from competition.sdk.scenarios.adversarial_swarm import run
@@ -173,6 +192,8 @@ def main(argv=None) -> int:
             mode=args.mode, photo_mode=photo_mode,
             accuracy=args.accuracy, noise_sigma_m=args.noise_sigma,
             yolo_model_path=args.yolo_model,
+            max_detection_range_m=args.max_detection_range,
+            full_accuracy_range_m=args.full_accuracy_range,
             **viz_kwargs, **common)
     return 0
 

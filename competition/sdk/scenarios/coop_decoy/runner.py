@@ -17,7 +17,10 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from ...core.observation import AreaSpec, GeoPoint, MissionBriefing
-from ...core.runner import RunnerBase, ScenarioConfig, read_weather, resolve_scenario_seed
+from ...core.runner import (
+    RunnerBase, ScenarioConfig, read_perception_range, read_weather,
+    resolve_scenario_seed,
+)
 from ...core.scoring import ScoringProfile, profile_multi_uav_coop_decoy
 from ...core.world_state import WorldState
 from .._astar_navigator import (
@@ -214,7 +217,6 @@ class CoopDecoyRunner(RunnerBase):
                 inject_astar_decoy(
                     client=client, entity=ent,
                     routes_path=decoy_routes_path,
-                    decoy_speed=5.0,
                     rng=local_rng, log=self.log,
                     route_name=route_name,
                     progress_cb=progress_cb,
@@ -248,6 +250,8 @@ def run(agent_cls, *, duration: float = 600.0,
         open_browser: bool = True,
         mode: str = "train", photo_mode: str = "auto",
         accuracy: float = 0.85, noise_sigma_m: float = 50.0,
+        max_detection_range_m: float | None = None,
+        full_accuracy_range_m: float | None = None,
         yolo_model_path: str = "") -> dict:
     """Convenience entry point for players. ``seed`` (>0) randomizes the scene.
 
@@ -255,10 +259,17 @@ def run(agent_cls, *, duration: float = 600.0,
       * ``mode`` — "train" (AccuracySimulator) | "eval" (YoloDetector)
       * ``photo_mode`` — 相机帧拉取模式：auto(默认)/on/off（见 ScenarioConfig）
       * ``accuracy`` / ``noise_sigma_m`` — AccuracySimulator params
+      * ``max_detection_range_m`` / ``full_accuracy_range_m`` — 距离门限
+        （None = 读 scenario.json perception 块；max 0 = 禁用，full 0 = 从 0 起衰减）
       * ``yolo_model_path`` — YOLO model path (eval mode)
     """
     from . import DEFAULT_SCENARIO_JSON
     scenario_path = scenario or DEFAULT_SCENARIO_JSON
+    pr = read_perception_range(scenario_path)
+    if max_detection_range_m is None:
+        max_detection_range_m = pr["max_detection_range_m"]
+    if full_accuracy_range_m is None:
+        full_accuracy_range_m = pr["full_accuracy_range_m"]
     cfg = ScenarioConfig(
         scenario_name="coop_decoy",
         scenario_path=scenario_path,
@@ -273,5 +284,7 @@ def run(agent_cls, *, duration: float = 600.0,
         accuracy=accuracy, noise_sigma_m=noise_sigma_m,
         yolo_model_path=yolo_model_path,
         weather=read_weather(scenario_path),
+        max_detection_range_m=max_detection_range_m,
+        full_accuracy_range_m=full_accuracy_range_m,
     )
     return CoopDecoyRunner(cfg, agent_cls).run()

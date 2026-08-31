@@ -14,26 +14,28 @@ import { GimbalState } from '../core/wgs84-projection';
  * original bug where the ray had a fixed 330-unit length and stopped in
  * mid-air when a UAV flew high.
  *
- * FOV cone: a standard right cone along the boresight, sized so its NEAR
- * rim — the base edge pointing most steeply at the ground — sits on the
- * terrain:
+ * FOV cone: a standard right cone along the boresight, extended to the same
+ * length as the direction line so its central axis lands on the terrain at
+ * the aim point:
  *
- *     L_cone = agl * cos(fov/2) / sin(|tilt| + fov/2)
+ *     L_cone = L_ray = agl / sin(|tilt|)
  *
- * The cone's radius is tan(fov/2) * L_cone, so its true 3D half-angle
- * stays exactly fov/2 — it remains an honest FOV indicator at every tilt.
+ * The cone's radius is tan(fov/2) * L_cone, so its true 3D half-angle stays
+ * exactly fov/2 — it remains an honest FOV indicator at every tilt.
  *
- * Why the near rim and not the far rim: a tilted cone's circular base
- * cannot have both its near edge (toward nadir) and far edge (toward
- * horizon) on a flat ground at once (only at |tilt| = 90 deg do they
- * coincide). Sizing for the FAR rim — the previous behaviour,
- * L_old = agl*cos(fov/2)/sin(|tilt|-fov/2) — drove the cone far past the
- * aim point and pushed the near rim deep underground at shallow gimbal
- * angles, so the cone appeared to shoot through the terrain instead of
- * lying on it. Sizing for the near rim puts the cone's footprint on the
- * ground (near rim at the terrain, far rim trailing slightly above it),
- * which reads as a cone lying on the surface — no ground penetration.
- * The terrain mesh being opaque further hides any incidental overlap.
+ * Why size to the aim point (centre axis) and not the near or far rim: a
+ * tilted cone's circular base cannot have both its near edge (toward nadir)
+ * and far edge (toward horizon) on flat ground at once. Sizing for the NEAR
+ * rim (L = agl*cos(fov/2)/sin(|tilt|+fov/2)) stops the cone well short of
+ * the aim point — at shallow tilts it was only a fraction of the direction
+ * line, so the cone looked like it was floating in the air, never reaching
+ * the ground the gimbal is aimed at. Sizing for the FAR rim
+ * (L = agl*cos(fov/2)/sin(|tilt|-fov/2)) is undefined when |tilt| < fov/2
+ * (the common shallow-gimbal case) and otherwise overshoots. Extending to
+ * the aim point instead puts the cone's centre on the ground; the near
+ * (lower) rim dips below the surface and is hidden by the opaque terrain
+ * mesh, leaving a clear elliptical footprint where the cone intersects the
+ * ground — i.e. the cone visibly meets the terrain.
  *
  * Geometry note: the indicator is attached as a child of the UAV model and
  * lives in the UAV body frame where local -Z is "forward" (nose). The model

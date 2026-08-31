@@ -1,0 +1,31 @@
+﻿HF2026 official upstream mirror
+
+Official repository:
+https://www.osredm.com/hf2026/hf2026-sim-windows.git
+
+Official branch:
+master
+
+Official commit:
+60abb991108a3536772dfd2e274da19c263d4a21
+
+Official short commit:
+60abb99
+
+Official commit date:
+2026-08-29T14:24:10+08:00
+
+Official commit subject:
+鏇存柊鏂扮増鏈細鍚屾绋嬪簭涓庡満鏅厤缃紝娓呯悊杩愯杈撳嚭鍜屾棫鐗堟枃妗?
+
+Synced at:
+2026-08-31 17:47:31 +08:00
+
+Local simulator:
+H:\HF2026\hf2026-sim-windows
+
+Source-only mirror:
+H:\HF2026\hf2026-source-only
+
+Custom algorithms preserved:
+competition/user_algorithms/adversarial_swarm/hf2026_v*.py
