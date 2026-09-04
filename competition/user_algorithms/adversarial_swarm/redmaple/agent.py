@@ -1,15 +1,4 @@
-"""
-RedMaple V2 runtime agent.
-
-Runtime pipeline:
-Observation
- -> local belief update
- -> communication fusion
- -> target allocation
- -> cooperative tracking/search
-
-This file is the actual SwarmAgent entry point.
-"""
+"""RedMaple V2 main agent entry."""
 
 from typing import List
 
@@ -23,105 +12,59 @@ from .tracker import CooperativeTracker
 
 
 class RedMapleAgent(SwarmAgent):
-    """RedMaple distributed cooperative swarm controller."""
-
     def __init__(self, my_uid: str):
         super().__init__(my_uid)
         self.uid = my_uid
         self.targets = TargetManager()
-        self.allocator = TargetAllocator()
+        self.allocator = TargetAllocator(my_uid)
         self.tracker = CooperativeTracker()
-
-        self.config = {}
-        self.home = None
-        self.search_index = 0
-        self.last_broadcast = -999
-        self.current_target = None
+        self.phase = 0
 
     def configure(self, config: dict):
         self.config = config or {}
 
     def reset(self):
         self.targets.clear()
-        self.tracker.reset()
-        self.home = None
-        self.search_index = 0
-        self.last_broadcast = -999
-        self.current_target = None
+        self.tracker.clear()
+        self.phase = 0
 
     def decide(self, obs, dt: float) -> List[Command]:
-        commands = []
-
+        cmds = []
         me = obs.self
 
-        if self.home is None:
-            self.home = (me.lat, me.lon)
-
-        sim_time = getattr(obs, "time", 0.0)
-
-        # 1. Fuse teammate information
         for msg in getattr(obs, "comm_inbox", []):
             payload = getattr(msg, "payload", msg)
-            decoded = decode_message(payload)
-            if decoded:
-                self.targets.fuse_remote(decoded, sim_time)
+            data = decode_message(payload)
+            if data:
+                self.targets.fuse_remote(data)
 
-        # 2. Update local perception
-        detections = getattr(me, "detections", None)
-        if detections is None:
-            single = getattr(me, "detection", None)
-            detections = [single] if single else []
+        detections = getattr(me, "detections", []) or []
+        self.targets.update_local(detections, getattr(obs, "time", 0.0))
 
-        self.targets.update_local(detections, sim_time)
-        self.targets.decay(sim_time)
+        best = self.targets.best_target()
+        if best is not None:
+            cmds.append(self.broadcast(encode_target(best)))
 
-        # 3. Periodically share strongest belief
-        if sim_time - self.last_broadcast > 2.0:
-            best = self.targets.best_target()
-            if best:
-                commands.append(self.broadcast(encode_target(best)))
-                self.last_broadcast = sim_time
-
-        # 4. Distributed allocation
-        self.current_target = self.allocator.select(
+        target = self.allocator.select(
             self.targets.all(),
-            me.lat,
-            me.lon,
+            getattr(me, "lat", 0.0),
+            getattr(me, "lon", 0.0),
         )
 
-        # 5. Execute mission
-        if self.current_target is not None:
-            commands.extend(
-                self.tracker.track(
-                    self.current_target,
-                    me,
-                    dt,
-                )
-            )
+        if target is not None:
+            point = self.tracker.command_point(target, self.uid)
+            if point:
+                cmds.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
         else:
-            commands.extend(self._search(me))
+            cmds.append(self._search(me))
 
-        return commands
+        return cmds
 
     def _search(self, me):
-        """Deterministic coverage fallback."""
-        uid_seed = abs(hash(self.uid)) % 1000
-        angle = (uid_seed + self.search_index * 17) % 360
-        self.search_index += 1
-
-        offset = 0.002
-        lat = me.lat + offset
-        lon = me.lon + offset
-
-        if angle % 4 == 0:
-            lon -= offset * 2
-        elif angle % 4 == 1:
-            lat -= offset * 2
-
-        return [
-            self.fly_to(
-                lat,
-                lon,
-                getattr(me, "alt", 120.0),
-            )
-        ]
+        self.phase += 1
+        offset = (int(str(self.uid)[-1]) + self.phase % 20) * 0.0001
+        return self.fly_to(
+            getattr(me, "lat", 0.0) + offset,
+            getattr(me, "lon", 0.0) + offset,
+            getattr(me, "alt", 120.0),
+        )
