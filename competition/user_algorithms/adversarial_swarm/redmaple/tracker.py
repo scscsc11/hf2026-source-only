@@ -1,11 +1,12 @@
-"""RedMaple RC2 cooperative tracking controller.
-
-Tracker converts target belief and assigned role into observation geometry.
-Command construction remains in agent layer.
-"""
+"""RedMaple cooperative tracking controller."""
 
 
 class CooperativeTracker:
+    """Convert target assignment into an observation point.
+
+    Command generation stays in agent.py.
+    """
+
     def __init__(self):
         self.target_id = None
         self.role = "SEARCHER"
@@ -18,27 +19,22 @@ class CooperativeTracker:
         self.target_id = None
         self.role = "SEARCHER"
 
-    def offset(self, uid):
-        try:
-            slot = int(uid) % 3
-        except Exception:
-            slot = 0
-
-        if self.role == "LEADER":
-            return 0.0, 0.0
-
-        if self.role == "FOLLOWER":
-            if slot == 1:
-                return -0.00015, 0.00025
-            return -0.00015, -0.00025
-
-        return 0.0005, 0.0005
-
     def command_point(self, target, uid):
         if target is None:
             return None
-        dx, dy = self.offset(uid)
-        return target.lat + dx, target.lon + dy
 
-    def track_point(self, target, uid):
-        return self.command_point(target, uid)
+        try:
+            slot = int(uid) % 3
+        except ValueError:
+            slot = 0
+
+        if self.role == "LEADER":
+            offset = (0.0, 0.0)
+        elif self.role == "FOLLOWER":
+            offset = (-0.00015, 0.00025 if slot == 1 else -0.00025)
+        else:
+            offset = (0.0005, 0.0005)
+
+        return target.lat + offset[0], target.lon + offset[1]
+
+    track_point = command_point
