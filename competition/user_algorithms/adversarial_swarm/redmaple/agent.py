@@ -1,7 +1,7 @@
-"""RedMaple V2 main agent entry.
+"""RedMaple V2 RC1 main agent entry.
 
-Keeps decision flow explicit:
-observation -> fusion -> target belief -> role -> allocation -> action.
+Decision pipeline:
+observation -> communication -> perception -> belief -> allocation -> role -> action.
 """
 
 from typing import List
@@ -37,52 +37,66 @@ class RedMapleAgent(SwarmAgent):
         self.search.reset()
         self.role.assign(None)
 
-    def decide(self, obs, dt: float) -> List[Command]:
-        cmds = []
+    def _safe_position(self, me):
+        return (
+            getattr(me, "lat", 0.0),
+            getattr(me, "lon", 0.0),
+        )
+
+    def _update_perception(self, obs):
         me = obs.self
         now = getattr(obs, "time", 0.0)
 
-        # 1. receive and fuse teammate knowledge
-        for msg in getattr(obs, "comm_inbox", []):
-            payload = getattr(msg, "payload", msg)
-            data = self.comm.decode(payload)
-            if data and data.get("type") == "target":
-                self.targets.fuse_remote(
-                    data["id"],
-                    data["lat"],
-                    data["lon"],
-                    data["confidence"],
-                    now,
-                )
-
-        # 2. update local perception
         detections = getattr(me, "detections", None)
         if detections is None:
             single = getattr(me, "detection", None)
             detections = [single] if single else []
 
-        for det in detections:
-            if getattr(det, "detected", True):
-                self.targets.update_detection(
-                    getattr(det, "target_lat", me.lat),
-                    getattr(det, "target_lon", me.lon),
-                    getattr(det, "confidence", 0.5),
-                    now,
-                    self.uid,
-                )
+        for det in detections or []:
+            if not getattr(det, "detected", True):
+                continue
+            self.targets.update_detection(
+                getattr(det, "target_lat", getattr(me, "lat", 0.0)),
+                getattr(det, "target_lon", getattr(me, "lon", 0.0)),
+                getattr(det, "confidence", 0.5),
+                now,
+                self.uid,
+            )
 
+    def _update_communication(self, obs):
+        now = getattr(obs, "time", 0.0)
+        for msg in getattr(obs, "comm_inbox", []):
+            payload = getattr(msg, "payload", msg)
+            data = self.comm.decode(payload)
+            if not data or data.get("type") != "target":
+                continue
+            self.targets.fuse_remote(
+                data["id"],
+                data["lat"],
+                data["lon"],
+                data["confidence"],
+                now,
+            )
+
+    def decide(self, obs, dt: float) -> List[Command]:
+        cmds = []
+        me = obs.self
+        now = getattr(obs, "time", 0.0)
+
+        self._update_communication(obs)
+        self._update_perception(obs)
         self.targets.decay(now)
 
-        # 3. choose task
         target = self.allocator.choose_target(
             list(self.targets.targets.values()),
-            (getattr(me, "lat", 0.0), getattr(me, "lon", 0.0)),
+            self._safe_position(me),
         )
 
         self.role.assign(target)
 
         if target is not None:
             cmds.append(self.broadcast(self.comm.encode_target(target)))
+            self.tracker.assign(target.target_id, self.role.role)
             point = self.tracker.command_point(target, self.uid)
             if point:
                 cmds.append(
