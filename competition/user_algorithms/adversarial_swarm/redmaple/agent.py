@@ -1,7 +1,7 @@
-"""RedMaple V2 RC1 main agent entry.
+"""RedMaple V2 RC2 main agent entry.
 
 Decision pipeline:
-observation -> communication -> perception -> belief -> allocation -> role -> action.
+communication -> perception -> belief -> allocation -> role -> action.
 """
 
 from typing import List
@@ -27,6 +27,8 @@ class RedMapleAgent(SwarmAgent):
         self.search = SearchPlanner(self.uid)
         self.comm = CommunicationManager()
         self.role = RoleManager(self.uid)
+        self.debug_state = {}
+        self.claimed_target = None
 
     def configure(self, config: dict):
         self.config = config or {}
@@ -36,17 +38,15 @@ class RedMapleAgent(SwarmAgent):
         self.tracker.clear()
         self.search.reset()
         self.role.assign(None)
+        self.claimed_target = None
+        self.debug_state = {}
 
     def _safe_position(self, me):
-        return (
-            getattr(me, "lat", 0.0),
-            getattr(me, "lon", 0.0),
-        )
+        return getattr(me, "lat", 0.0), getattr(me, "lon", 0.0)
 
     def _update_perception(self, obs):
         me = obs.self
         now = getattr(obs, "time", 0.0)
-
         detections = getattr(me, "detections", None)
         if detections is None:
             single = getattr(me, "detection", None)
@@ -68,15 +68,24 @@ class RedMapleAgent(SwarmAgent):
         for msg in getattr(obs, "comm_inbox", []):
             payload = getattr(msg, "payload", msg)
             data = self.comm.decode(payload)
-            if not data or data.get("type") != "target":
+            if not data:
                 continue
-            self.targets.fuse_remote(
-                data["id"],
-                data["lat"],
-                data["lon"],
-                data["confidence"],
-                now,
-            )
+            if data.get("type") == "target":
+                self.targets.fuse_remote(
+                    data["id"],
+                    data["lat"],
+                    data["lon"],
+                    data["confidence"],
+                    now,
+                )
+
+    def _update_debug(self, role, target, action):
+        self.debug_state = {
+            "uid": self.uid,
+            "role": role,
+            "target": getattr(target, "target_id", None),
+            "action": action,
+        }
 
     def decide(self, obs, dt: float) -> List[Command]:
         cmds = []
@@ -95,28 +104,25 @@ class RedMapleAgent(SwarmAgent):
         self.role.assign(target)
 
         if target is not None:
-            cmds.append(self.broadcast(self.comm.encode_target(target)))
             self.tracker.assign(target.target_id, self.role.role)
+
+            if self.claimed_target != target.target_id:
+                self.claimed_target = target.target_id
+                cmds.append(self.broadcast(self.comm.encode_claim(target.target_id, self.uid)))
+
+            cmds.append(self.broadcast(self.comm.encode_target(target)))
+
             point = self.tracker.command_point(target, self.uid)
             if point:
-                cmds.append(
-                    self.fly_to(
-                        point[0],
-                        point[1],
-                        getattr(me, "alt", 120.0),
-                    )
-                )
+                self._update_debug(self.role.role, target, "TRACK")
+                cmds.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
         else:
-            lat, lon = self.search.next_point(
-                me,
-                getattr(obs, "briefing", None),
-            )
-            cmds.append(
-                self.fly_to(
-                    lat,
-                    lon,
-                    getattr(me, "alt", 120.0),
-                )
-            )
+            if self.claimed_target is not None:
+                cmds.append(self.broadcast(self.comm.encode_release(self.claimed_target, self.uid)))
+                self.claimed_target = None
+
+            lat, lon = self.search.next_point(me, getattr(obs, "briefing", None))
+            self._update_debug("SEARCHER", None, "SEARCH")
+            cmds.append(self.fly_to(lat, lon, getattr(me, "alt", 120.0)))
 
         return cmds
