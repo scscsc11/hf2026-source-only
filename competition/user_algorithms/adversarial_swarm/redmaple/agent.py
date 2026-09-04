@@ -1,11 +1,14 @@
 """
-RedMaple V2 main agent entry.
+RedMaple V2 runtime agent.
 
-Integrates:
-- target_manager: local target belief
-- communication: distributed messages
-- allocator: target assignment
-- tracker: tracking behavior
+Runtime pipeline:
+Observation
+ -> local belief update
+ -> communication fusion
+ -> target allocation
+ -> cooperative tracking/search
+
+This file is the actual SwarmAgent entry point.
 """
 
 from typing import List
@@ -20,7 +23,7 @@ from .tracker import CooperativeTracker
 
 
 class RedMapleAgent(SwarmAgent):
-    """Distributed cooperative swarm agent."""
+    """RedMaple distributed cooperative swarm controller."""
 
     def __init__(self, my_uid: str):
         super().__init__(my_uid)
@@ -28,58 +31,97 @@ class RedMapleAgent(SwarmAgent):
         self.targets = TargetManager()
         self.allocator = TargetAllocator()
         self.tracker = CooperativeTracker()
+
+        self.config = {}
         self.home = None
-        self.phase = 0
+        self.search_index = 0
+        self.last_broadcast = -999
+        self.current_target = None
 
     def configure(self, config: dict):
         self.config = config or {}
 
     def reset(self):
         self.targets.clear()
-        self.home = None
-        self.phase = 0
         self.tracker.reset()
+        self.home = None
+        self.search_index = 0
+        self.last_broadcast = -999
+        self.current_target = None
 
     def decide(self, obs, dt: float) -> List[Command]:
-        cmds = []
+        commands = []
 
         me = obs.self
+
         if self.home is None:
             self.home = (me.lat, me.lon)
 
-        # receive cooperative information
+        sim_time = getattr(obs, "time", 0.0)
+
+        # 1. Fuse teammate information
         for msg in getattr(obs, "comm_inbox", []):
             payload = getattr(msg, "payload", msg)
-            data = decode_message(payload)
-            if data:
-                self.targets.fuse_remote(data)
+            decoded = decode_message(payload)
+            if decoded:
+                self.targets.fuse_remote(decoded, sim_time)
 
-        # update local detections
+        # 2. Update local perception
         detections = getattr(me, "detections", None)
         if detections is None:
-            detections = []
-        self.targets.update_local(detections, getattr(obs, "time", 0.0))
+            single = getattr(me, "detection", None)
+            detections = [single] if single else []
 
-        # broadcast strongest local belief
-        best = self.targets.best_target()
-        if best is not None:
-            cmds.append(self.broadcast(encode_target(best)))
+        self.targets.update_local(detections, sim_time)
+        self.targets.decay(sim_time)
 
-        # choose mission
-        target = self.allocator.select(self.targets.all(), me.lat, me.lon)
+        # 3. Periodically share strongest belief
+        if sim_time - self.last_broadcast > 2.0:
+            best = self.targets.best_target()
+            if best:
+                commands.append(self.broadcast(encode_target(best)))
+                self.last_broadcast = sim_time
 
-        if target is not None:
-            cmds.extend(self.tracker.track(target, me))
+        # 4. Distributed allocation
+        self.current_target = self.allocator.select(
+            self.targets.all(),
+            me.lat,
+            me.lon,
+        )
+
+        # 5. Execute mission
+        if self.current_target is not None:
+            commands.extend(
+                self.tracker.track(
+                    self.current_target,
+                    me,
+                    dt,
+                )
+            )
         else:
-            # deterministic search pattern
-            cmds.extend(self._search(me))
+            commands.extend(self._search(me))
 
-        return cmds
+        return commands
 
     def _search(self, me):
-        # simple spiral-like deterministic exploration fallback
-        step = (hash(self.uid) % 360) * 0.01 + self.phase
-        self.phase += 0.02
-        lat = me.lat + 0.001 * step
-        lon = me.lon + 0.001 * step
-        return [self.fly_to(lat, lon, getattr(me, "alt", 120.0))]
+        """Deterministic coverage fallback."""
+        uid_seed = abs(hash(self.uid)) % 1000
+        angle = (uid_seed + self.search_index * 17) % 360
+        self.search_index += 1
+
+        offset = 0.002
+        lat = me.lat + offset
+        lon = me.lon + offset
+
+        if angle % 4 == 0:
+            lon -= offset * 2
+        elif angle % 4 == 1:
+            lat -= offset * 2
+
+        return [
+            self.fly_to(
+                lat,
+                lon,
+                getattr(me, "alt", 120.0),
+            )
+        ]
