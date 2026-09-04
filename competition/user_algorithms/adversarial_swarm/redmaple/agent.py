@@ -1,4 +1,8 @@
-"""RedMaple V2 main agent entry."""
+"""RedMaple V2 main agent entry.
+
+Keeps decision flow explicit:
+observation -> fusion -> target belief -> role -> allocation -> action.
+"""
 
 from typing import List
 
@@ -6,20 +10,23 @@ from competition.sdk.scenarios.adversarial_swarm.agent import SwarmAgent
 from competition.sdk.core.commands import Command
 
 from .target_manager import TargetManager
-from .communication import encode_target, decode_message
+from .communication import CommunicationManager
 from .allocator import TargetAllocator
 from .tracker import CooperativeTracker
 from .search_planner import SearchPlanner
+from .role_manager import RoleManager
 
 
 class RedMapleAgent(SwarmAgent):
     def __init__(self, my_uid: str):
         super().__init__(my_uid)
-        self.uid = my_uid
+        self.uid = str(my_uid)
         self.targets = TargetManager()
-        self.allocator = TargetAllocator(my_uid)
+        self.allocator = TargetAllocator(self.uid)
         self.tracker = CooperativeTracker()
-        self.search = SearchPlanner(my_uid)
+        self.search = SearchPlanner(self.uid)
+        self.comm = CommunicationManager()
+        self.role = RoleManager(self.uid)
 
     def configure(self, config: dict):
         self.config = config or {}
@@ -28,35 +35,74 @@ class RedMapleAgent(SwarmAgent):
         self.targets.clear()
         self.tracker.clear()
         self.search.reset()
+        self.role.assign(None)
 
     def decide(self, obs, dt: float) -> List[Command]:
         cmds = []
         me = obs.self
+        now = getattr(obs, "time", 0.0)
 
+        # 1. receive and fuse teammate knowledge
         for msg in getattr(obs, "comm_inbox", []):
             payload = getattr(msg, "payload", msg)
-            data = decode_message(payload)
-            if data:
-                self.targets.fuse_remote(data)
+            data = self.comm.decode(payload)
+            if data and data.get("type") == "target":
+                self.targets.fuse_remote(
+                    data["id"],
+                    data["lat"],
+                    data["lon"],
+                    data["confidence"],
+                    now,
+                )
 
-        detections = getattr(me, "detections", []) or []
-        self.targets.update_local(detections, getattr(obs, "time", 0.0))
+        # 2. update local perception
+        detections = getattr(me, "detections", None)
+        if detections is None:
+            single = getattr(me, "detection", None)
+            detections = [single] if single else []
 
-        best = self.targets.best_target()
-        if best is not None:
-            cmds.append(self.broadcast(encode_target(best)))
+        for det in detections:
+            if getattr(det, "detected", True):
+                self.targets.update_detection(
+                    getattr(det, "target_lat", me.lat),
+                    getattr(det, "target_lon", me.lon),
+                    getattr(det, "confidence", 0.5),
+                    now,
+                    self.uid,
+                )
 
+        self.targets.decay(now)
+
+        # 3. choose task
         target = self.allocator.choose_target(
-            self.targets.all(),
+            list(self.targets.targets.values()),
             (getattr(me, "lat", 0.0), getattr(me, "lon", 0.0)),
         )
 
+        self.role.assign(target)
+
         if target is not None:
+            cmds.append(self.broadcast(self.comm.encode_target(target)))
             point = self.tracker.command_point(target, self.uid)
             if point:
-                cmds.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
+                cmds.append(
+                    self.fly_to(
+                        point[0],
+                        point[1],
+                        getattr(me, "alt", 120.0),
+                    )
+                )
         else:
-            lat, lon = self.search.next_point(me, getattr(obs, "briefing", None))
-            cmds.append(self.fly_to(lat, lon, getattr(me, "alt", 120.0)))
+            lat, lon = self.search.next_point(
+                me,
+                getattr(obs, "briefing", None),
+            )
+            cmds.append(
+                self.fly_to(
+                    lat,
+                    lon,
+                    getattr(me, "alt", 120.0),
+                )
+            )
 
         return cmds
