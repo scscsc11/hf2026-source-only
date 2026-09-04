@@ -1,8 +1,12 @@
-"""RedMaple V1 - adversarial swarm agent.
+"""RedMaple V1 - cooperative adversarial swarm agent.
 
-First competition version. Keeps the official SEARCH/ACQUIRE/TRACK idea,
-adds local target memory, confidence scoring and simple distributed target
-selection.
+Based on the official adversarial swarm baseline ideas:
+- local target memory
+- confidence fusion
+- distributed target selection
+- cooperative tracking state
+
+This is the first real development version.
 """
 from __future__ import annotations
 
@@ -18,7 +22,6 @@ from competition.sdk.core.commands import (
     set_gimbal_fov,
 )
 from competition.sdk.scenarios.adversarial_swarm import SwarmAgent
-from competition.sdk.scenarios.adversarial_swarm.observation import SwarmObs
 
 
 SEARCH = "SEARCH"
@@ -26,132 +29,114 @@ TRACK = "TRACK"
 
 
 class RedMapleAgent(SwarmAgent):
-    """Distributed cooperative search and tracking agent."""
-
     def configure(self, config) -> None:
         self.alt = 500.0
-        self.speed = 25.0
-        self.track_speed = 28.0
+        self.search_speed = 25.0
+        self.track_speed = 30.0
         self.fov = 30.0
+        self.tick = 0
         self.state = SEARCH
         self.targets: Dict[str, dict] = {}
-        self.current_target: Optional[str] = None
-        self.tick = 0
-        self.time = 0.0
-        self.search_point = None
+        self.current_target = None
 
     def reset(self) -> None:
+        self.tick = 0
         self.state = SEARCH
         self.targets = {}
         self.current_target = None
-        self.tick = 0
-        self.time = 0.0
-        self.search_point = None
 
-    def _distance(self, a, b, c, d):
+    def _distance(self, lat1, lon1, lat2, lon2):
         r = 6371000
-        p1 = math.radians(a)
-        p2 = math.radians(c)
-        dp = math.radians(c - a)
-        dl = math.radians(d - b)
-        x = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-        return 2 * r * math.asin(math.sqrt(x))
+        p1 = math.radians(lat1)
+        p2 = math.radians(lat2)
+        dp = math.radians(lat2-lat1)
+        dl = math.radians(lon2-lon1)
+        a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+        return 2*r*math.asin(math.sqrt(a))
 
-    def _update_memory(self, obs):
-        detections = getattr(obs.self, "detections", None) or []
-        if not detections:
+    def _target_key(self, lat, lon):
+        return f'{round(lat,5)}_{round(lon,5)}'
+
+    def _fuse_detection(self, det):
+        if not getattr(det, 'detected', False):
             return
-
-        for d in detections:
-            if not getattr(d, "detected", False):
-                continue
-            lat = getattr(d, "target_lat", None)
-            lon = getattr(d, "target_lon", None)
-            if lat is None or lon is None:
-                continue
-
-            key = f"{round(lat,5)}_{round(lon,5)}"
-            item = self.targets.get(key, {
-                "lat": lat,
-                "lon": lon,
-                "confidence": 0.0,
-                "count": 0,
-            })
-            item["lat"] = lat
-            item["lon"] = lon
-            item["count"] += 1
-            item["confidence"] = min(1.0, item["confidence"] + 0.15)
-            self.targets[key] = item
-
-            if self.tick % 20 == 0:
-                broadcast(f"T:{lat:.6f},{lon:.6f},{item['confidence']:.2f}")
+        lat = getattr(det, 'target_lat', None)
+        lon = getattr(det, 'target_lon', None)
+        if lat is None or lon is None:
+            return
+        key = self._target_key(lat, lon)
+        t = self.targets.get(key, {
+            'lat': lat,
+            'lon': lon,
+            'confidence': 0.0,
+            'seen': 0,
+            'claimed': 0,
+        })
+        t['lat'] = lat
+        t['lon'] = lon
+        t['seen'] += 1
+        t['confidence'] = min(1.0, t['confidence'] + 0.2)
+        self.targets[key] = t
 
     def _receive(self, obs):
-        for msg in getattr(obs, "comm_inbox", []) or []:
-            payload = getattr(msg, "payload", "")
-            if not payload.startswith("T:"):
+        for msg in getattr(obs, 'comm_inbox', []) or []:
+            payload = getattr(msg, 'payload', '')
+            if not payload.startswith('T:'):
                 continue
             try:
-                _, lat, lon, conf = payload.split(":")
-                key = f"{round(float(lat),5)}_{round(float(lon),5)}"
+                _, lat, lon, conf = payload.split(':')
+                key = self._target_key(float(lat), float(lon))
                 self.targets[key] = {
-                    "lat": float(lat),
-                    "lon": float(lon),
-                    "confidence": float(conf),
-                    "count": 1,
+                    'lat': float(lat),
+                    'lon': float(lon),
+                    'confidence': float(conf),
+                    'seen': 1,
+                    'claimed': 0,
                 }
             except Exception:
-                continue
+                pass
 
     def _select_target(self, obs):
-        if not self.targets:
-            return None
         best = None
         best_score = -1e9
-        for k, t in self.targets.items():
-            dist = self._distance(
-                obs.self.lat,
-                obs.self.lon,
-                t["lat"],
-                t["lon"],
-            )
-            score = t["confidence"] * 100.0 - dist / 1000.0
+        for key, t in self.targets.items():
+            d = self._distance(obs.self.lat, obs.self.lon, t['lat'], t['lon'])
+            score = t['confidence'] * 100 - d / 1000 - t['claimed'] * 20
             if score > best_score:
                 best_score = score
-                best = k
+                best = key
         return best
 
-    def decide(self, obs: SwarmObs, dt: float) -> List[Command]:
+    def decide(self, obs, dt) -> List[Command]:
         self.tick += 1
-        self.time += dt
-        cmds: List[Command] = [set_gimbal_fov(self.fov)]
+        cmds = [set_gimbal_fov(self.fov)]
 
         self._receive(obs)
-        self._update_memory(obs)
+        for det in getattr(obs.self, 'detections', []) or []:
+            self._fuse_detection(det)
+
+        if self.tick % 20 == 0:
+            for t in list(self.targets.values())[:3]:
+                cmds.append(broadcast(f"T:{t['lat']}:{t['lon']}:{t['confidence']}"))
 
         if self.current_target not in self.targets:
             self.current_target = self._select_target(obs)
 
-        if self.current_target is not None:
+        if self.current_target:
             t = self.targets[self.current_target]
-            dist = self._distance(obs.self.lat, obs.self.lon, t["lat"], t["lon"])
-
-            if dist > 400:
-                self.state = TRACK
-                cmds.append(fly_to(t["lat"], t["lon"], self.alt, self.track_speed))
+            dist = self._distance(obs.self.lat, obs.self.lon, t['lat'], t['lon'])
+            self.state = TRACK
+            if dist > 300:
+                cmds.append(fly_to(t['lat'], t['lon'], self.alt, self.track_speed))
             else:
-                cmds.append(point_gimbal(0.0, -20.0))
-                if self.tick % 15 == 0:
-                    cmds.append(report_target(t["lat"], t["lon"], self.current_target))
+                cmds.append(point_gimbal(0, -20))
+                if self.tick % 10 == 0:
+                    cmds.append(report_target(t['lat'], t['lon'], self.current_target))
         else:
             self.state = SEARCH
-            if self.search_point is None:
-                self.search_point = (obs.self.lat, obs.self.lon)
-            cmds.append(fly_to(
-                self.search_point[0],
-                self.search_point[1],
-                self.alt,
-                self.speed,
-            ))
+            angle = (self.tick % 360) * math.pi / 180
+            lat = obs.self.lat + 0.002 * math.sin(angle)
+            lon = obs.self.lon + 0.002 * math.cos(angle)
+            cmds.append(fly_to(lat, lon, self.alt, self.search_speed))
 
         return cmds
