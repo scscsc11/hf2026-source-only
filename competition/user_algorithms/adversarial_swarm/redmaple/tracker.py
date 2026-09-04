@@ -1,7 +1,7 @@
-"""RedMaple V2 cooperative tracking controller.
+"""RedMaple RC2 cooperative tracking controller.
 
-The tracker only decides where a UAV should move around a target.
-Command construction stays in the agent layer to avoid SDK coupling.
+Tracker converts target belief and assigned role into observation geometry.
+Command construction remains in agent layer.
 """
 
 
@@ -10,7 +10,7 @@ class CooperativeTracker:
         self.target_id = None
         self.role = "SEARCHER"
 
-    def assign(self, target_id, role="FOLLOWER"):
+    def assign(self, target_id, role="SEARCHER"):
         self.target_id = target_id
         self.role = role
 
@@ -19,18 +19,24 @@ class CooperativeTracker:
         self.role = "SEARCHER"
 
     def offset(self, uid):
-        """Simple three-slot observation geometry."""
-        slot = int(uid) % 3 if str(uid).isdigit() else 0
-        if slot == 0:
-            return 0.0003, 0.0
-        if slot == 1:
-            return -0.00015, 0.00025
-        return -0.00015, -0.00025
+        try:
+            slot = int(uid) % 3
+        except Exception:
+            slot = 0
+
+        if self.role == "LEADER":
+            return 0.0, 0.0
+
+        if self.role == "FOLLOWER":
+            if slot == 1:
+                return -0.00015, 0.00025
+            return -0.00015, -0.00025
+
+        return 0.0005, 0.0005
 
     def command_point(self, target, uid):
         if target is None:
             return None
-
         dx, dy = self.offset(uid)
         return target.lat + dx, target.lon + dy
 
