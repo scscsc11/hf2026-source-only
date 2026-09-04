@@ -4,7 +4,7 @@ Maintains local target belief for distributed adversarial swarm control.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 import math
 
 
@@ -24,6 +24,9 @@ class TargetManager:
     def __init__(self):
         self.targets: Dict[str, TargetRecord] = {}
 
+    def clear(self):
+        self.targets.clear()
+
     def _key(self, lat: float, lon: float) -> str:
         return f"{round(lat, 5)}_{round(lon, 5)}"
 
@@ -32,49 +35,62 @@ class TargetManager:
         if key not in self.targets:
             self.targets[key] = TargetRecord(key, lat, lon)
 
-        t = self.targets[key]
-        t.lat = lat
-        t.lon = lon
-        t.confidence = min(1.0, 0.7 * t.confidence + 0.3 * confidence + 0.05)
-        t.last_seen = now
-        t.state = "CONFIRMED" if t.confidence > 0.6 else "SUSPECT"
+        target = self.targets[key]
+        target.lat = lat
+        target.lon = lon
+        target.confidence = min(1.0, 0.7 * target.confidence + 0.3 * confidence + 0.05)
+        target.last_seen = now
+        target.state = "CONFIRMED" if target.confidence > 0.6 else "SUSPECT"
 
-        if uid and uid not in t.observers:
-            t.observers.append(uid)
-
-        return t
+        if uid and uid not in target.observers:
+            target.observers.append(uid)
+        return target
 
     def fuse_remote(self, target_id, lat, lon, confidence, now):
         if target_id not in self.targets:
             self.targets[target_id] = TargetRecord(target_id, lat, lon)
 
-        t = self.targets[target_id]
-        t.lat = 0.7 * t.lat + 0.3 * lat
-        t.lon = 0.7 * t.lon + 0.3 * lon
-        t.confidence = min(1.0, 0.7 * t.confidence + 0.3 * confidence)
-        t.last_seen = max(t.last_seen, now)
-        return t
+        target = self.targets[target_id]
+        target.lat = 0.7 * target.lat + 0.3 * lat
+        target.lon = 0.7 * target.lon + 0.3 * lon
+        target.confidence = min(1.0, 0.7 * target.confidence + 0.3 * confidence)
+        target.last_seen = max(target.last_seen, now)
+        target.state = "CONFIRMED" if target.confidence > 0.6 else "SUSPECT"
+        return target
+
+    def claim(self, target_id, uid):
+        target = self.targets.get(target_id)
+        if target and uid not in target.assigned:
+            target.assigned.append(uid)
+
+    def release(self, target_id, uid):
+        target = self.targets.get(target_id)
+        if target and uid in target.assigned:
+            target.assigned.remove(uid)
 
     def decay(self, now):
         remove = []
-        for k, t in self.targets.items():
-            dt = now - t.last_seen
-            t.confidence *= math.exp(-0.01 * dt)
-            if t.confidence < 0.05:
-                remove.append(k)
-        for k in remove:
-            del self.targets[k]
+        for key, target in self.targets.items():
+            dt = max(0.0, now - target.last_seen)
+            target.confidence *= math.exp(-0.01 * dt)
+            if target.confidence < 0.05:
+                remove.append(key)
+        for key in remove:
+            del self.targets[key]
 
     def best_target(self, lat, lon):
         best = None
         best_score = -1e9
-        for t in self.targets.values():
-            d = self.distance(lat, lon, t.lat, t.lon)
-            load_penalty = len(t.assigned) * 20
-            score = t.confidence * 100 - d / 1000 - load_penalty
+        for target in self.targets.values():
+            distance = self.distance(lat, lon, target.lat, target.lon)
+            score = (
+                target.confidence * 100
+                - distance / 1000
+                - len(target.assigned) * 20
+            )
             if score > best_score:
                 best_score = score
-                best = t
+                best = target
         return best
 
     @staticmethod
