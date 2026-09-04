@@ -9,6 +9,7 @@ from .target_manager import TargetManager
 from .communication import encode_target, decode_message
 from .allocator import TargetAllocator
 from .tracker import CooperativeTracker
+from .search_planner import SearchPlanner
 
 
 class RedMapleAgent(SwarmAgent):
@@ -18,7 +19,7 @@ class RedMapleAgent(SwarmAgent):
         self.targets = TargetManager()
         self.allocator = TargetAllocator(my_uid)
         self.tracker = CooperativeTracker()
-        self.phase = 0
+        self.search = SearchPlanner(my_uid)
 
     def configure(self, config: dict):
         self.config = config or {}
@@ -26,7 +27,7 @@ class RedMapleAgent(SwarmAgent):
     def reset(self):
         self.targets.clear()
         self.tracker.clear()
-        self.phase = 0
+        self.search.reset()
 
     def decide(self, obs, dt: float) -> List[Command]:
         cmds = []
@@ -45,10 +46,9 @@ class RedMapleAgent(SwarmAgent):
         if best is not None:
             cmds.append(self.broadcast(encode_target(best)))
 
-        target = self.allocator.select(
+        target = self.allocator.choose_target(
             self.targets.all(),
-            getattr(me, "lat", 0.0),
-            getattr(me, "lon", 0.0),
+            (getattr(me, "lat", 0.0), getattr(me, "lon", 0.0)),
         )
 
         if target is not None:
@@ -56,15 +56,7 @@ class RedMapleAgent(SwarmAgent):
             if point:
                 cmds.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
         else:
-            cmds.append(self._search(me))
+            lat, lon = self.search.next_point(me, getattr(obs, "briefing", None))
+            cmds.append(self.fly_to(lat, lon, getattr(me, "alt", 120.0)))
 
         return cmds
-
-    def _search(self, me):
-        self.phase += 1
-        offset = (int(str(self.uid)[-1]) + self.phase % 20) * 0.0001
-        return self.fly_to(
-            getattr(me, "lat", 0.0) + offset,
-            getattr(me, "lon", 0.0) + offset,
-            getattr(me, "alt", 120.0),
-        )
