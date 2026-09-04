@@ -1,7 +1,7 @@
-"""RedMaple V2 RC2 main agent entry.
+"""RedMaple RC1 runnable agent.
 
-Decision pipeline:
-communication -> perception -> belief -> allocation -> role -> action.
+Simple competition loop:
+perception -> belief -> allocation -> role -> action.
 """
 
 from typing import List
@@ -27,50 +27,23 @@ class RedMapleAgent(SwarmAgent):
         self.search = SearchPlanner(self.uid)
         self.comm = CommunicationManager()
         self.role = RoleManager(self.uid)
-        self.debug_state = {}
         self.claimed_target = None
 
-    def configure(self, config: dict):
-        self.config = config or {}
+    def configure(self, config):
+        self.config = config
 
     def reset(self):
         self.targets.clear()
         self.tracker.clear()
         self.search.reset()
-        self.role.assign(None)
         self.claimed_target = None
-        self.debug_state = {}
 
-    def _safe_position(self, me):
-        return getattr(me, "lat", 0.0), getattr(me, "lon", 0.0)
-
-    def _update_perception(self, obs):
-        me = obs.self
+    def update_targets(self, obs):
         now = getattr(obs, "time", 0.0)
-        detections = getattr(me, "detections", None)
-        if detections is None:
-            single = getattr(me, "detection", None)
-            detections = [single] if single else []
 
-        for det in detections or []:
-            if not getattr(det, "detected", True):
-                continue
-            self.targets.update_detection(
-                getattr(det, "target_lat", getattr(me, "lat", 0.0)),
-                getattr(det, "target_lon", getattr(me, "lon", 0.0)),
-                getattr(det, "confidence", 0.5),
-                now,
-                self.uid,
-            )
-
-    def _update_communication(self, obs):
-        now = getattr(obs, "time", 0.0)
         for msg in getattr(obs, "comm_inbox", []):
-            payload = getattr(msg, "payload", msg)
-            data = self.comm.decode(payload)
-            if not data:
-                continue
-            if data.get("type") == "target":
+            data = self.comm.decode(getattr(msg, "payload", msg))
+            if data and data.get("type") == "target":
                 self.targets.fuse_remote(
                     data["id"],
                     data["lat"],
@@ -79,50 +52,57 @@ class RedMapleAgent(SwarmAgent):
                     now,
                 )
 
-    def _update_debug(self, role, target, action):
-        self.debug_state = {
-            "uid": self.uid,
-            "role": role,
-            "target": getattr(target, "target_id", None),
-            "action": action,
-        }
+        me = obs.self
+        detections = getattr(me, "detections", [])
+        if not detections:
+            detection = getattr(me, "detection", None)
+            detections = [detection] if detection else []
+
+        for det in detections:
+            self.targets.update_detection(
+                getattr(det, "target_lat", me.lat),
+                getattr(det, "target_lon", me.lon),
+                getattr(det, "confidence", 0.5),
+                now,
+                self.uid,
+            )
+
+        self.targets.decay(now)
 
     def decide(self, obs, dt: float) -> List[Command]:
-        cmds = []
+        commands = []
         me = obs.self
-        now = getattr(obs, "time", 0.0)
 
-        self._update_communication(obs)
-        self._update_perception(obs)
-        self.targets.decay(now)
+        self.update_targets(obs)
 
         target = self.allocator.choose_target(
             list(self.targets.targets.values()),
-            self._safe_position(me),
+            (me.lat, me.lon),
         )
 
-        self.role.assign(target)
-
-        if target is not None:
+        if target:
+            self.role.assign(target)
             self.tracker.assign(target.target_id, self.role.role)
 
             if self.claimed_target != target.target_id:
                 self.claimed_target = target.target_id
-                cmds.append(self.broadcast(self.comm.encode_claim(target.target_id, self.uid)))
+                commands.append(
+                    self.broadcast(self.comm.encode_claim(target.target_id, self.uid))
+                )
 
-            cmds.append(self.broadcast(self.comm.encode_target(target)))
+            commands.append(self.broadcast(self.comm.encode_target(target)))
 
             point = self.tracker.command_point(target, self.uid)
-            if point:
-                self._update_debug(self.role.role, target, "TRACK")
-                cmds.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
+            commands.append(self.fly_to(point[0], point[1], getattr(me, "alt", 120.0)))
+
         else:
-            if self.claimed_target is not None:
-                cmds.append(self.broadcast(self.comm.encode_release(self.claimed_target, self.uid)))
+            if self.claimed_target:
+                commands.append(
+                    self.broadcast(self.comm.encode_release(self.claimed_target, self.uid))
+                )
                 self.claimed_target = None
 
             lat, lon = self.search.next_point(me, getattr(obs, "briefing", None))
-            self._update_debug("SEARCHER", None, "SEARCH")
-            cmds.append(self.fly_to(lat, lon, getattr(me, "alt", 120.0)))
+            commands.append(self.fly_to(lat, lon, getattr(me, "alt", 120.0)))
 
-        return cmds
+        return commands
